@@ -1,15 +1,15 @@
 {
   "files": {
     "main.css": "/Desk-Reservation/static/css/main.1a81fa01.css",
-    "main.js": "/Desk-Reservation/static/js/main.0bf4586e.js",
+    "main.js": "/Desk-Reservation/static/js/main.080c06a1.js",
     "static/js/453.4de4dfe6.chunk.js": "/Desk-Reservation/static/js/453.4de4dfe6.chunk.js",
     "index.html": "/Desk-Reservation/index.html",
     "main.1a81fa01.css.map": "/Desk-Reservation/static/css/main.1a81fa01.css.map",
-    "main.0bf4586e.js.map": "/Desk-Reservation/static/js/main.0bf4586e.js.map",
+    "main.080c06a1.js.map": "/Desk-Reservation/static/js/main.080c06a1.js.map",
     "453.4de4dfe6.chunk.js.map": "/Desk-Reservation/static/js/453.4de4dfe6.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.1a81fa01.css",
-    "static/js/main.0bf4586e.js"
+    "static/js/main.080c06a1.js"
   ]
 }
