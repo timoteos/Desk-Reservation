@@ -4,6 +4,7 @@ import LandingPage from './pages/LandingPage';
 import ReservationPage from './pages/ReservationPage';
 import CalendarPage from './pages/CalendarPage';
 import DeskSelectionPage from './pages/DeskSelectionPage';
+import UserConfirmationPage from './pages/UserConfirmationPage';
 
 export default function App() {
   return (
@@ -14,6 +15,7 @@ export default function App() {
           <Route path="/reservation" element={<ReservationPage />} />
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/desk-selection" element={<DeskSelectionPage />} />
+          <Route path="/request" element={<UserConfirmationPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

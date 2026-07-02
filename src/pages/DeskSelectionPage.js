@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
@@ -50,6 +50,7 @@ const deskColor = (status, selected) => {
 
 export default function DeskSelectionPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [selectedDesk, setSelectedDesk] = useState(null);
 
   const dateStr = searchParams.get('date') || '';
@@ -133,6 +134,10 @@ export default function DeskSelectionPage() {
         <div className="w-full max-w-5xl flex justify-end opacity-0 animate-fade-up" style={{ animationDelay: '300ms' }}>
           <button
             disabled={!selectedDesk}
+            onClick={() => {
+              if (!selectedDesk) return;
+              navigate(`/request?desk=${selectedDesk}&date=${dateStr}&startMin=${startMin}&endMin=${endMin}`);
+            }}
             className="bg-mqd-btn hover:bg-mqd-btn-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold px-8 py-3 rounded transition flex items-center gap-2"
           >
             Next Page

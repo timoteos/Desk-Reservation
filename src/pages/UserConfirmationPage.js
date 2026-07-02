@@ -1,0 +1,107 @@
+import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Mail, CheckCircle2 } from 'lucide-react';
+import Breadcrumb from '../components/Breadcrumb';
+
+const CRUMBS = [
+  { label: 'Landing', path: '/' },
+  { label: 'Reservation', path: '/reservation' },
+  { label: 'Desk Selection', path: '/desk-selection' },
+  { label: 'User Confirmation', path: '/request' },
+];
+
+const formatMinutes = (mins) => {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hour = h > 12 ? h - 12 : h === 0 ? 12 : h;
+  return `${hour}:${m.toString().padStart(2, '0')} ${ampm}`;
+};
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+};
+
+const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+export default function UserConfirmationPage() {
+  const [searchParams] = useSearchParams();
+  const [email, setEmail] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+
+  const deskId = searchParams.get('desk');
+  const dateStr = searchParams.get('date') || '';
+  const startMin = parseInt(searchParams.get('startMin') || '480', 10);
+  const endMin = parseInt(searchParams.get('endMin') || '540', 10);
+
+  const dateLabel = formatDate(dateStr);
+  const timeLabel = `${formatMinutes(startMin)} - ${formatMinutes(endMin)}`;
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!isValidEmail(email)) return;
+    setSubmitted(true);
+  };
+
+  return (
+    <>
+      <Breadcrumb crumbs={CRUMBS} />
+
+      <div className="flex-1 flex flex-col items-center justify-center px-8 py-12 bg-gray-50">
+        <div className="w-full max-w-lg flex flex-col gap-6 bg-white rounded-xl shadow-md border border-gray-100 p-8 opacity-0 animate-fade-up">
+
+          <div className="text-center">
+            <h1 className="text-mqd-title text-2xl font-bold">Confirm Your Reservation</h1>
+            <p className="text-gray-500 text-sm mt-1">Review the details below and enter your email to request this desk.</p>
+          </div>
+
+          <div className="bg-gray-50 border border-gray-100 rounded-lg p-5 text-center text-sm text-gray-700 space-y-1">
+            <p><span className="font-semibold text-mqd-title">Desk:</span> Desk {deskId}</p>
+            <p><span className="font-semibold text-mqd-title">Location:</span> MQD System Office</p>
+            <p>
+              <span className="font-semibold text-mqd-title">Date & Time:</span>{' '}
+              {dateLabel} - {dateLabel} &nbsp; {timeLabel}
+            </p>
+          </div>
+
+          {submitted ? (
+            <div className="flex flex-col items-center gap-2 text-center py-4">
+              <CheckCircle2 className="w-10 h-10 text-mqd-title" />
+              <p className="text-mqd-title font-semibold">Request submitted</p>
+              <p className="text-gray-500 text-sm">A confirmation will be sent to {email}.</p>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              <div>
+                <label htmlFor="email" className="text-gray-700 font-medium mb-2 flex items-center gap-2">
+                  <Mail className="w-4 h-4" />
+                  Email
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@dhs.hawaii.gov"
+                  required
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={!isValidEmail(email)}
+                className="w-full bg-mqd-btn hover:bg-mqd-btn-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-4 rounded-lg text-base transition"
+              >
+                Confirm and Request
+              </button>
+            </form>
+          )}
+
+        </div>
+      </div>
+    </>
+  );
+}
