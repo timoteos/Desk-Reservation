@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { ArrowRight } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 const CRUMBS = [
@@ -41,10 +42,10 @@ const DESKS = [
 ];
 
 const deskColor = (status, selected) => {
-  if (selected) return 'bg-blue-500 ring-2 ring-blue-300';
-  if (status === 'booked') return 'bg-red-500 opacity-85';
-  if (status === 'partial') return 'bg-orange-400';
-  return 'bg-green-500';
+  if (selected) return 'bg-mqd-title ring-2 ring-mqd-title/40';
+  if (status === 'booked') return 'bg-rose-500 opacity-85';
+  if (status === 'partial') return 'bg-amber-400';
+  return 'bg-emerald-500';
 };
 
 export default function DeskSelectionPage() {
@@ -62,20 +63,21 @@ export default function DeskSelectionPage() {
     <>
       <Breadcrumb crumbs={CRUMBS} />
 
-      <div className="flex-1 flex flex-col items-center px-8 py-6 gap-4">
+      <div className="flex-1 flex flex-col items-center px-8 py-6 gap-4 bg-gray-50">
         {/* Date / time header */}
-        <div className="flex items-center justify-between w-full max-w-5xl">
-          <h2 className="text-lg font-semibold text-gray-800">{dateLabel}</h2>
-          <h2 className="text-lg font-semibold text-gray-800">{timeLabel}</h2>
+        <div className="flex items-center justify-between w-full max-w-5xl bg-white rounded-xl shadow-md border border-gray-100 px-6 py-4 opacity-0 animate-fade-up">
+          <h2 className="text-lg font-semibold text-mqd-title">{dateLabel}</h2>
+          <h2 className="text-lg font-semibold text-mqd-title">{timeLabel}</h2>
         </div>
 
         {/* Floor plan with overlaid desks */}
-        <div className="w-full max-w-5xl relative">
+        <div className="w-full max-w-5xl bg-white rounded-xl shadow-md border border-gray-100 p-3 opacity-0 animate-fade-up" style={{ animationDelay: '100ms' }}>
+        <div className="relative">
           {/* Map image at its natural aspect ratio so % overlays track it exactly */}
           <img
             src="/office-map.png"
             alt="Office floor plan"
-            className="block w-full h-auto rounded-lg border-2 border-gray-400"
+            className="block w-full h-auto rounded-lg border border-gray-200"
           />
 
           {/* Desk overlays */}
@@ -86,7 +88,7 @@ export default function DeskSelectionPage() {
               <div
                 key={desk.id}
                 onClick={() => clickable && setSelectedDesk(desk.id)}
-                className={`absolute flex items-center justify-center rounded text-white font-bold shadow-md transition select-none whitespace-nowrap
+                className={`absolute flex items-center justify-center rounded text-white font-bold shadow-md transition select-none whitespace-nowrap overflow-hidden
                   ${deskColor(desk.status, isSelected)}
                   ${clickable ? 'cursor-pointer hover:brightness-110' : 'cursor-not-allowed'}
                 `}
@@ -96,42 +98,45 @@ export default function DeskSelectionPage() {
                   transform: 'translate(-50%, -50%)',
                   width: '5.5%',
                   height: '10%',
-                  fontSize: '0.6rem',
-                  padding: '0 6px',
+                  fontSize: 'clamp(0.4rem, 1.1vw, 0.6rem)',
+                  padding: '0 4px',
                 }}
               >
-                {desk.label}
+                <span className="hidden sm:inline">{desk.label}</span>
+                <span className="sm:hidden">{desk.id}</span>
               </div>
             );
           })}
         </div>
+        </div>
 
         {/* Legend */}
-        <div className="w-full max-w-5xl bg-white border border-gray-300 rounded p-3 text-xs text-gray-700 shadow self-start">
-          <p className="font-semibold mb-1">Map Legend:</p>
+        <div className="w-full max-w-5xl bg-white border border-gray-100 rounded-xl p-4 text-xs text-gray-700 shadow-md self-start opacity-0 animate-fade-up" style={{ animationDelay: '200ms' }}>
+          <p className="font-semibold mb-2 text-mqd-title">Map Legend:</p>
           <div className="flex flex-wrap gap-x-4 gap-y-1">
             <div className="flex items-center gap-2">
-              <div className="w-4 h-3 rounded bg-green-500" />
+              <div className="w-4 h-3 rounded bg-emerald-500" />
               <span>Green - Fully Available</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-3 rounded bg-red-500" />
+              <div className="w-4 h-3 rounded bg-rose-500" />
               <span>Red - Fully Booked</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-3 rounded bg-orange-400" />
+              <div className="w-4 h-3 rounded bg-amber-400" />
               <span>Orange - Partially Available (no extension)</span>
             </div>
           </div>
         </div>
 
         {/* Next button */}
-        <div className="w-full max-w-5xl flex justify-end">
+        <div className="w-full max-w-5xl flex justify-end opacity-0 animate-fade-up" style={{ animationDelay: '300ms' }}>
           <button
             disabled={!selectedDesk}
-            className="bg-mqd-btn hover:bg-mqd-btn-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold px-8 py-3 rounded transition"
+            className="bg-mqd-btn hover:bg-mqd-btn-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold px-8 py-3 rounded transition flex items-center gap-2"
           >
-            Next Page →
+            Next Page
+            <ArrowRight className="w-4 h-4" />
           </button>
         </div>
       </div>

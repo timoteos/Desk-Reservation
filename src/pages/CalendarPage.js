@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 import { getBookingsForDate } from '../data/mockReservations';
 
@@ -87,20 +88,24 @@ function Calendar({ selected, onSelect, minDate }) {
   };
 
   return (
-    <div className="border border-gray-300 rounded p-5 w-80 max-w-full">
+    <div className="bg-white rounded-xl shadow-md border border-gray-100 p-5 w-80 max-w-full">
       <div className="flex items-center justify-between mb-4">
-        <button onClick={prevMonth} className="text-gray-500 hover:text-gray-800 px-1 text-lg">‹</button>
+        <button onClick={prevMonth} className="text-gray-500 hover:text-mqd-btn p-1 rounded transition">
+          <ChevronLeft className="w-5 h-5" />
+        </button>
         <div className="flex gap-2">
           <select value={viewMonth} onChange={(e) => setViewMonth(Number(e.target.value))}
-            className="border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 focus:outline-none">
+            className="border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-mqd-btn">
             {MONTHS.map((m, i) => <option key={m} value={i}>{m}</option>)}
           </select>
           <select value={viewYear} onChange={(e) => setViewYear(Number(e.target.value))}
-            className="border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 focus:outline-none">
+            className="border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-mqd-btn">
             {years.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
-        <button onClick={nextMonth} className="text-gray-500 hover:text-gray-800 px-1 text-lg">›</button>
+        <button onClick={nextMonth} className="text-gray-500 hover:text-mqd-btn p-1 rounded transition">
+          <ChevronRight className="w-5 h-5" />
+        </button>
       </div>
 
       <div className="grid grid-cols-7 text-center mb-1">
@@ -109,15 +114,15 @@ function Calendar({ selected, onSelect, minDate }) {
         ))}
       </div>
 
-      <div className="grid grid-cols-7 text-center">
+      <div key={`${viewYear}-${viewMonth}`} className="grid grid-cols-7 text-center animate-fade-scale">
         {cells.map((cell, i) => (
           <button
             key={i}
             onClick={() => !isPast(cell) && cell.current && onSelect(new Date(viewYear, viewMonth, cell.day))}
             disabled={isPast(cell) || !cell.current}
             className={`h-9 w-9 mx-auto rounded-full text-sm flex items-center justify-center transition
-              ${isSelected(cell) ? 'bg-gray-900 text-white font-bold' : ''}
-              ${!isSelected(cell) && cell.current && !isPast(cell) ? 'hover:bg-gray-100 text-gray-800' : ''}
+              ${isSelected(cell) ? 'bg-mqd-btn text-white font-bold' : ''}
+              ${!isSelected(cell) && cell.current && !isPast(cell) ? 'hover:bg-mqd-btn/10 text-gray-800' : ''}
               ${isPast(cell) || !cell.current ? 'text-gray-300 cursor-default' : ''}
             `}
           >
@@ -163,21 +168,23 @@ export default function CalendarPage() {
     <>
       <Breadcrumb crumbs={CRUMBS} />
 
-      <div className="flex-1 flex flex-wrap items-center justify-center gap-8 md:gap-16 px-4 md:px-8 py-10">
-        <Calendar
-          selected={selectedDate}
-          onSelect={(d) => { setSelectedDate(d); setSelectedSlot(null); }}
-          minDate={initDate()}
-        />
+      <div className="flex-1 flex flex-wrap items-center justify-center gap-8 md:gap-16 px-4 md:px-8 py-10 bg-gray-50">
+        <div className="opacity-0 animate-fade-up">
+          <Calendar
+            selected={selectedDate}
+            onSelect={(d) => { setSelectedDate(d); setSelectedSlot(null); }}
+            minDate={initDate()}
+          />
+        </div>
 
         {/* Time slot panel */}
-        <div className="bg-gray-200 rounded p-6 w-80 max-w-full flex flex-col gap-4">
+        <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 w-80 max-w-full flex flex-col gap-4 opacity-0 animate-fade-up" style={{ animationDelay: '100ms' }}>
           <div className="text-center">
-            <p className="text-gray-700 font-medium">{formattedDate}</p>
+            <p className="text-mqd-title font-semibold">{formattedDate}</p>
             <p className="text-gray-500 text-xs mt-1">{durationLabel} blocks</p>
           </div>
 
-          <div className="flex flex-col gap-2 max-h-80 overflow-y-auto pr-1">
+          <div key={dateStr} className="flex flex-col gap-2 max-h-80 overflow-y-auto pr-1 animate-fade-scale">
             {availableSlots.length === 0 ? (
               <p className="text-center text-gray-500 text-sm py-6">
                 No availability for {durationLabel} on this day.
@@ -207,9 +214,10 @@ export default function CalendarPage() {
                 `/desk-selection?date=${dateStr}&startMin=${selectedSlot.startMin}&endMin=${selectedSlot.endMin}&type=${searchParams.get('type') || 'hourly'}`
               );
             }}
-            className="w-full bg-mqd-btn hover:bg-mqd-btn-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2 rounded transition mt-auto"
+            className="w-full bg-mqd-btn hover:bg-mqd-btn-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2 rounded transition mt-auto flex items-center justify-center gap-2"
           >
-            Next Page →
+            Next Page
+            <ArrowRight className="w-4 h-4" />
           </button>
         </div>
       </div>
