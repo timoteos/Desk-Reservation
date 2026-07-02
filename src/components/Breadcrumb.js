@@ -1,6 +1,8 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 export default function Breadcrumb({ crumbs }) {
+  const { search } = useLocation();
+
   return (
     <nav className="px-8 pt-4 pb-2">
       <ol className="flex items-center gap-1 text-sm text-mqd-title font-medium">
@@ -11,7 +13,7 @@ export default function Breadcrumb({ crumbs }) {
               {isLast ? (
                 <span className="text-mqd-title">{crumb.label}</span>
               ) : (
-                <Link to={crumb.path} className="hover:underline text-mqd-title">
+                <Link to={{ pathname: crumb.path, search }} className="hover:underline text-mqd-title">
                   {crumb.label}
                 </Link>
               )}
