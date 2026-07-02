@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 
 export default function Header() {
@@ -12,10 +13,13 @@ export default function Header() {
       <h1 className="text-lg md:text-3xl font-extrabold text-mqd-title leading-tight flex-1">
         MQD Desk Reservation Systems Office
       </h1>
-      <button className="flex items-center gap-1.5 text-sm font-medium text-mqd-title border border-mqd-title/30 rounded-full px-3 py-1.5 hover:bg-mqd-title/10 transition shrink-0">
+      <Link
+        to="/admin/login"
+        className="flex items-center gap-1.5 text-sm font-medium text-mqd-title border border-mqd-title/30 rounded-full px-3 py-1.5 hover:bg-mqd-title/10 transition shrink-0"
+      >
         <Lock className="w-3.5 h-3.5" />
         <span className="hidden sm:inline">Admin Login</span>
-      </button>
+      </Link>
     </header>
   );
 }

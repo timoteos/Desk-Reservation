@@ -5,6 +5,7 @@ import ReservationPage from './pages/ReservationPage';
 import CalendarPage from './pages/CalendarPage';
 import DeskSelectionPage from './pages/DeskSelectionPage';
 import UserConfirmationPage from './pages/UserConfirmationPage';
+import AdminLoginPage from './pages/AdminLoginPage';
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/desk-selection" element={<DeskSelectionPage />} />
           <Route path="/request" element={<UserConfirmationPage />} />
+          <Route path="/admin/login" element={<AdminLoginPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
