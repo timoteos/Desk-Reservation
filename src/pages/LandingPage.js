@@ -26,7 +26,7 @@ export default function LandingPage() {
         setButtonsVisible(true);
         setDoneTyping(true);
       }
-    }, 130);
+    }, 90);
     return () => clearInterval(interval);
   }, []);
 
@@ -61,7 +61,10 @@ export default function LandingPage() {
           >
             Make a Reservation
           </button>
-          <button className="bg-mqd-btn hover:bg-mqd-btn-hover text-white font-semibold text-base px-10 py-4 rounded shadow-lg transition">
+          <button
+            onClick={() => navigate('/confirmation-code')}
+            className="bg-mqd-btn hover:bg-mqd-btn-hover text-white font-semibold text-base px-10 py-4 rounded shadow-lg transition"
+          >
             Confirmation Code
           </button>
         </div>

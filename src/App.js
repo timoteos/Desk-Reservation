@@ -6,6 +6,7 @@ import CalendarPage from './pages/CalendarPage';
 import DeskSelectionPage from './pages/DeskSelectionPage';
 import UserConfirmationPage from './pages/UserConfirmationPage';
 import AdminLoginPage from './pages/AdminLoginPage';
+import ConfirmationCodePage from './pages/ConfirmationCodePage';
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
           <Route path="/desk-selection" element={<DeskSelectionPage />} />
           <Route path="/request" element={<UserConfirmationPage />} />
           <Route path="/admin/login" element={<AdminLoginPage />} />
+          <Route path="/confirmation-code" element={<ConfirmationCodePage />} />
         </Route>
       </Routes>
     </BrowserRouter>
