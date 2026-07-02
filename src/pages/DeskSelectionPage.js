@@ -76,7 +76,7 @@ export default function DeskSelectionPage() {
         <div className="relative">
           {/* Map image at its natural aspect ratio so % overlays track it exactly */}
           <img
-            src="/office-map.png"
+            src={`${process.env.PUBLIC_URL}/office-map.png`}
             alt="Office floor plan"
             className="block w-full h-auto rounded-lg border border-gray-200"
           />

@@ -11,7 +11,7 @@ import AdminDashboardPage from './pages/AdminDashboardPage';
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={process.env.PUBLIC_URL}>
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<LandingPage />} />

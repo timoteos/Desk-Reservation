@@ -35,8 +35,8 @@ export default function Footer() {
 
         {/* State seals */}
         <div className="flex items-center gap-3 self-center">
-          <img src="/logos/soh.png" alt="State of Hawaii" className="w-16 h-16 object-contain opacity-80" onError={(e) => { e.target.style.display='none'; }} />
-          <img src="/logos/dhs.png" alt="DHS" className="w-16 h-16 object-contain opacity-80" onError={(e) => { e.target.style.display='none'; }} />
+          <img src={`${process.env.PUBLIC_URL}/logos/soh.png`} alt="State of Hawaii" className="w-16 h-16 object-contain opacity-80" onError={(e) => { e.target.style.display='none'; }} />
+          <img src={`${process.env.PUBLIC_URL}/logos/dhs.png`} alt="DHS" className="w-16 h-16 object-contain opacity-80" onError={(e) => { e.target.style.display='none'; }} />
         </div>
       </div>
 
