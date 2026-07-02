@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Monitor, Search, CheckCircle2 } from 'lucide-react';
 
+
 const FEATURES = [
   { icon: <Search className="w-9 h-9" />, title: 'Browse Availability', desc: 'See open desks by date and time at a glance.' },
   { icon: <Monitor className="w-9 h-9" />, title: 'Pick a Desk', desc: 'Choose the exact desk that works for you.' },
@@ -26,7 +27,7 @@ export default function LandingPage() {
         setButtonsVisible(true);
         setDoneTyping(true);
       }
-    }, 130);
+    }, 90);
     return () => clearInterval(interval);
   }, []);
 
@@ -37,7 +38,7 @@ export default function LandingPage() {
         className="relative w-full flex flex-col items-center justify-end gap-6 pb-12"
         style={{
           minHeight: '420px',
-          backgroundImage: "url('/beach.jpg')",
+          backgroundImage: `url('${process.env.PUBLIC_URL}/beach.jpg')`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
         }}
@@ -61,7 +62,10 @@ export default function LandingPage() {
           >
             Make a Reservation
           </button>
-          <button className="bg-mqd-btn hover:bg-mqd-btn-hover text-white font-semibold text-base px-10 py-4 rounded shadow-lg transition">
+          <button
+            onClick={() => navigate('/confirmation-code')}
+            className="bg-mqd-btn hover:bg-mqd-btn-hover text-white font-semibold text-base px-10 py-4 rounded shadow-lg transition"
+          >
             Confirmation Code
           </button>
         </div>
