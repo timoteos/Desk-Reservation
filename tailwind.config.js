@@ -5,12 +5,11 @@ module.exports = {
     extend: {
       colors: {
         mqd: {
-          olive: '#4a5e1a',
-          'olive-dark': '#3a4a14',
-          btn: '#5a7020',
-          'btn-dark': '#4a5e18',
-          footer: '#1a1c1e',
-          'footer-faq': '#5a7020',
+          title: '#4B6B1A',
+          btn: '#4a5e1a',
+          'btn-hover': '#3a4a14',
+          footer: '#232527',
+          faq: '#4a5e1a',
         },
       },
     },

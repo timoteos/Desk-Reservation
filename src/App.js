@@ -1,7 +1,19 @@
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import Layout from './components/Layout';
+import LandingPage from './pages/LandingPage';
+import ReservationPage from './pages/ReservationPage';
+import CalendarPage from './pages/CalendarPage';
+
 export default function App() {
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center">
-      <p className="text-gray-500 text-sm">MQD Desk Reservation — ready to build</p>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/reservation" element={<ReservationPage />} />
+          <Route path="/calendar" element={<CalendarPage />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   );
 }
