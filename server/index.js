@@ -17,6 +17,11 @@ app.use('/api/desks', require('./routes/desks'));
 app.use('/api/reservations', require('./routes/reservations'));
 app.use('/api/audit-logs', require('./routes/auditLogs'));
 
+app.get('/api/time-slots', (req, res) => {
+  const { TIME_SLOTS } = require('./config/timeSlots');
+  res.json(TIME_SLOTS);
+});
+
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 app.use(errorHandler);

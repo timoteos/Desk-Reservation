@@ -3,6 +3,32 @@ const router = express.Router();
 const Reservation = require('../models/Reservation');
 const AuditLog = require('../models/AuditLog');
 const { protect, adminOnly } = require('../middleware/auth');
+const { TIME_SLOTS, isValidSlot } = require('../config/timeSlots');
+
+// GET /api/reservations/slots?date=YYYY-MM-DD&deskId=xxx
+router.get('/slots', protect, async (req, res) => {
+  try {
+    const { date, deskId } = req.query;
+    if (!date || !deskId) return res.status(400).json({ message: 'date and deskId are required' });
+
+    const booked = await Reservation.find({
+      desk: deskId,
+      date: new Date(date),
+      status: { $in: ['pending', 'approved', 'checked_in'] },
+    }).select('startTime endTime status');
+
+    const bookedKeys = new Set(booked.map((r) => `${r.startTime}-${r.endTime}`));
+
+    const slots = TIME_SLOTS.map((slot) => ({
+      ...slot,
+      available: !bookedKeys.has(`${slot.startTime}-${slot.endTime}`),
+    }));
+
+    res.json(slots);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 const log = (action, reservation, performedBy, details, meta) =>
   AuditLog.create({ action, reservation: reservation._id, user: reservation.user, performedBy, details, meta });
@@ -46,6 +72,13 @@ router.get('/:id', protect, async (req, res) => {
 router.post('/', protect, async (req, res) => {
   try {
     const { desk, date, startTime, endTime, notes } = req.body;
+
+    if (!isValidSlot(startTime, endTime)) {
+      return res.status(400).json({
+        message: 'Invalid time slot. Must be one of the predefined 2-hour office blocks.',
+        validSlots: TIME_SLOTS,
+      });
+    }
 
     const conflict = await Reservation.findOne({
       desk,
