@@ -112,7 +112,10 @@ export default function ReservationPage() {
             <ArrowRight className="w-4 h-4" />
           </button>
 
-          <button className="flex items-center justify-center gap-2 text-mqd-btn hover:underline text-sm font-medium">
+          <button
+            onClick={() => navigate('/recurring-schedule')}
+            className="flex items-center justify-center gap-2 text-mqd-btn hover:underline text-sm font-medium"
+          >
             <RotateCcw className="w-4 h-4" />
             <span>Set up a recurring schedule</span>
           </button>

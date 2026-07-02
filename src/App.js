@@ -8,6 +8,7 @@ import UserConfirmationPage from './pages/UserConfirmationPage';
 import AdminLoginPage from './pages/AdminLoginPage';
 import ConfirmationCodePage from './pages/ConfirmationCodePage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
+import RecurringSchedulePage from './pages/RecurringSchedulePage';
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
           <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route path="/confirmation-code" element={<ConfirmationCodePage />} />
           <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+          <Route path="/recurring-schedule" element={<RecurringSchedulePage />} />
         </Route>
       </Routes>
     </BrowserRouter>
