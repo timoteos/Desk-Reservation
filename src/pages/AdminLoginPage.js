@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Lock, Mail, Eye, EyeOff } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
@@ -8,13 +9,15 @@ const CRUMBS = [
 ];
 
 export default function AdminLoginPage() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Admin auth not wired up yet — placeholder submit handler.
+    // Admin auth not wired up yet — navigates straight to the dashboard.
+    navigate('/admin/dashboard');
   };
 
   return (
