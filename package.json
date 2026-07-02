@@ -2,6 +2,7 @@
   "name": "desk_reservation",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://timoteos.github.io/Desk-Reservation",
   "dependencies": {
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
@@ -17,6 +18,8 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "lint": "eslint src --ext .js,.jsx",
@@ -42,6 +45,7 @@
   },
   "devDependencies": {
     "autoprefixer": "^10.5.2",
+    "gh-pages": "^6.3.0",
     "postcss": "^8.5.16",
     "tailwindcss": "^3.4.19"
   }

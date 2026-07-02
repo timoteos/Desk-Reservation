@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Redirecting…</title>
+    <script>
+      // GitHub Pages has no server-side routing, so any deep link (e.g. /calendar)
+      // hits this 404 page. Encode the path into a query string and redirect to
+      // the app root, where the inline script in index.html restores it.
+      var path = window.location.pathname.replace('/Desk-Reservation', '');
+      var redirect = window.location.origin + '/Desk-Reservation/?redirect=' + encodeURIComponent(path + window.location.search);
+      window.location.replace(redirect);
+    </script>
+  </head>
+  <body></body>
+</html>
