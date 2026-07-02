@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ArrowRight, RotateCcw, Clock, CalendarDays } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 const CRUMBS = [
@@ -32,8 +33,13 @@ export default function ReservationPage() {
     <>
       <Breadcrumb crumbs={CRUMBS} />
 
-      <div className="flex-1 flex flex-col items-center justify-center px-8 py-12">
-        <div className="w-full max-w-lg flex flex-col gap-6">
+      <div className="flex-1 flex flex-col items-center justify-center px-8 py-12 bg-gray-50">
+        <div className="w-full max-w-lg flex flex-col gap-6 bg-white rounded-xl shadow-md border border-gray-100 p-8 opacity-0 animate-fade-up">
+
+          <div>
+            <h1 className="text-mqd-title text-2xl font-bold">Make a Reservation</h1>
+            <p className="text-gray-500 text-sm mt-1">Tell us what you need and we'll show you what's available.</p>
+          </div>
 
           {/* Reservation type toggle */}
           <div>
@@ -41,16 +47,18 @@ export default function ReservationPage() {
             <div className="flex rounded-lg border border-gray-300 overflow-hidden">
               <button
                 onClick={() => { setType('hourly'); setCount(1); }}
-                className={`flex-1 py-3 text-sm font-semibold transition
+                className={`flex-1 py-3 text-sm font-semibold transition flex items-center justify-center gap-2
                   ${type === 'hourly' ? 'bg-mqd-btn text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
               >
+                <Clock className="w-4 h-4" />
                 Hourly
               </button>
               <button
                 onClick={() => { setType('full'); setCount(1); }}
-                className={`flex-1 py-3 text-sm font-semibold transition border-l border-gray-300
+                className={`flex-1 py-3 text-sm font-semibold transition border-l border-gray-300 flex items-center justify-center gap-2
                   ${type === 'full' ? 'bg-mqd-btn text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
               >
+                <CalendarDays className="w-4 h-4" />
                 Full day(s)
               </button>
             </div>
@@ -68,7 +76,7 @@ export default function ReservationPage() {
               >
                 −
               </button>
-              <span className="text-gray-800 text-xl font-semibold w-6 text-center">{count}</span>
+              <span className="text-mqd-title text-xl font-semibold w-10 h-10 flex items-center justify-center rounded-lg bg-mqd-btn/10">{count}</span>
               <button
                 onClick={increment}
                 className="w-12 h-12 rounded-lg border border-gray-300 text-gray-700 text-xl font-bold hover:bg-gray-100 transition flex items-center justify-center"
@@ -98,13 +106,14 @@ export default function ReservationPage() {
           {/* See availability */}
           <button
             onClick={handleSeeAvailability}
-            className="w-full bg-mqd-btn hover:bg-mqd-btn-hover text-white font-semibold py-4 rounded-lg text-base transition"
+            className="w-full bg-mqd-btn hover:bg-mqd-btn-hover text-white font-semibold py-4 rounded-lg text-base transition flex items-center justify-center gap-2"
           >
-            See availability ↗
+            See availability
+            <ArrowRight className="w-4 h-4" />
           </button>
 
           <button className="flex items-center justify-center gap-2 text-mqd-btn hover:underline text-sm font-medium">
-            <span>↺</span>
+            <RotateCcw className="w-4 h-4" />
             <span>Set up a recurring schedule</span>
           </button>
 

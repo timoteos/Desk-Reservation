@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import Breadcrumb from '../components/Breadcrumb';
 import { getBookingsForDate } from '../data/mockReservations';
 
@@ -87,7 +87,7 @@ function Calendar({ selected, onSelect, minDate }) {
   };
 
   return (
-    <div className="border border-gray-300 rounded p-5 w-80">
+    <div className="border border-gray-300 rounded p-5 w-80 max-w-full">
       <div className="flex items-center justify-between mb-4">
         <button onClick={prevMonth} className="text-gray-500 hover:text-gray-800 px-1 text-lg">‹</button>
         <div className="flex gap-2">
@@ -131,6 +131,7 @@ function Calendar({ selected, onSelect, minDate }) {
 
 export default function CalendarPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   const initDate = () => {
     const param = searchParams.get('startDate');
@@ -162,7 +163,7 @@ export default function CalendarPage() {
     <>
       <Breadcrumb crumbs={CRUMBS} />
 
-      <div className="flex-1 flex items-center justify-center gap-16 px-8 py-10">
+      <div className="flex-1 flex flex-wrap items-center justify-center gap-8 md:gap-16 px-4 md:px-8 py-10">
         <Calendar
           selected={selectedDate}
           onSelect={(d) => { setSelectedDate(d); setSelectedSlot(null); }}
@@ -170,7 +171,7 @@ export default function CalendarPage() {
         />
 
         {/* Time slot panel */}
-        <div className="bg-gray-200 rounded p-6 w-80 flex flex-col gap-4">
+        <div className="bg-gray-200 rounded p-6 w-80 max-w-full flex flex-col gap-4">
           <div className="text-center">
             <p className="text-gray-700 font-medium">{formattedDate}</p>
             <p className="text-gray-500 text-xs mt-1">{durationLabel} blocks</p>
@@ -200,6 +201,12 @@ export default function CalendarPage() {
 
           <button
             disabled={!selectedSlot}
+            onClick={() => {
+              if (!selectedSlot) return;
+              navigate(
+                `/desk-selection?date=${dateStr}&startMin=${selectedSlot.startMin}&endMin=${selectedSlot.endMin}&type=${searchParams.get('type') || 'hourly'}`
+              );
+            }}
             className="w-full bg-mqd-btn hover:bg-mqd-btn-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2 rounded transition mt-auto"
           >
             Next Page →
