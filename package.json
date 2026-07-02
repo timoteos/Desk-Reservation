@@ -7,28 +7,18 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^13.5.0",
-    "bcryptjs": "^3.0.3",
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.6.3",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-scripts": "5.0.1",
-    "uuid": "^14.0.1",
     "web-vitals": "^2.1.4"
   },
-  "proxy": "http://localhost:5000",
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "server": "node server/index.js",
-    "dev": "concurrently \"npm run server\" \"npm start\"",
-    "lint": "eslint src server --ext .js,.jsx",
-    "lint:fix": "eslint src server --ext .js,.jsx --fix"
+    "lint": "eslint src --ext .js,.jsx",
+    "lint:fix": "eslint src --ext .js,.jsx --fix"
   },
   "eslintConfig": {
     "extends": [
@@ -49,8 +39,8 @@
     ]
   },
   "devDependencies": {
-    "concurrently": "^10.0.3",
-    "eslint-plugin-import": "^2.32.0",
-    "eslint-plugin-n": "^17.24.0"
+    "autoprefixer": "^10.5.2",
+    "postcss": "^8.5.16",
+    "tailwindcss": "^3.4.19"
   }
 }
