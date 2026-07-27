@@ -59,12 +59,27 @@ router.get('/code/:code', async (req, res, next) => {
 // POST /api/reservations
 router.post('/', async (req, res, next) => {
   try {
-    const { userId, deskId, date, startMin, endMin } = req.body;
+    const { userId, email, deskId, date, startMin, endMin } = req.body;
 
-    if (!userId || !deskId || !date || startMin == null || endMin == null) {
+    if ((!userId && !email) || !deskId || !date || startMin == null || endMin == null) {
       return res.status(400).json({
-        message: 'userId, deskId, date, startMin and endMin are required',
+        message: 'deskId, date, startMin, endMin and either userId or email are required',
       });
+    }
+
+    // Until DHS SSO is in place, the booker identifies themselves by email.
+    let resolvedUserId = userId;
+    if (!resolvedUserId) {
+      const { rows } = await query(
+        'SELECT user_id FROM users WHERE lower(email) = lower($1) AND is_active',
+        [email.trim()]
+      );
+      if (rows.length === 0) {
+        return res.status(404).json({
+          message: `No account found for ${email.trim()}. Check the address or contact your administrator.`,
+        });
+      }
+      resolvedUserId = rows[0].user_id;
     }
 
     const { startsAt, endsAt } = toTimestamps(date, startMin, endMin);
@@ -74,7 +89,7 @@ router.post('/', async (req, res, next) => {
          (user_id, desk_id, starts_at, ends_at, confirmation_code)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING reservation_id`,
-      [userId, deskId, startsAt, endsAt, generateConfirmationCode()]
+      [resolvedUserId, deskId, startsAt, endsAt, generateConfirmationCode()]
     );
 
     const result = await query(

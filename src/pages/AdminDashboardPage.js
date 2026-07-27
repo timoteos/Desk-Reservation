@@ -1,7 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, X, LayoutGrid, ScrollText, Inbox, CalendarClock } from 'lucide-react';
-import mockUsers from '../data/mockUsers';
-import mockReservations from '../data/mockReservations';
+import { getUsers, getUserReservations, getReservationsForDate } from '../api/client';
 
 const TABS = [
   { key: 'main', label: 'Main', icon: LayoutGrid },
@@ -24,16 +23,24 @@ const formatDate = (dateStr) => {
   return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 };
 
-const todayStr = new Date().toISOString().split('T')[0];
-
-const getUpcomingReservations = (userName) =>
-  mockReservations
-    .filter((r) => r.user === userName && r.date >= todayStr)
-    .sort((a, b) => (a.date === b.date ? a.startMin - b.startMin : a.date.localeCompare(b.date)));
-
 function UserDetailModal({ user, onClose }) {
+  const [reservations, setReservations] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    let cancelled = false;
+    setLoading(true);
+
+    getUserReservations(user.id)
+      .then((data) => { if (!cancelled) setReservations(data); })
+      .catch(() => { if (!cancelled) setReservations([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+
+    return () => { cancelled = true; };
+  }, [user]);
+
   if (!user) return null;
-  const reservations = getUpcomingReservations(user.name);
 
   return (
     <div
@@ -55,7 +62,9 @@ function UserDetailModal({ user, onClose }) {
         <h2 className="text-mqd-title text-xl font-bold mb-1">{user.name}</h2>
         <p className="text-gray-500 text-sm mb-5">Upcoming confirmed reservations</p>
 
-        {reservations.length === 0 ? (
+        {loading ? (
+          <p className="text-gray-400 text-sm text-center py-8">Loading reservations…</p>
+        ) : reservations.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-8 text-center">
             <CalendarClock className="w-9 h-9 text-gray-300" />
             <p className="text-gray-500 text-sm">No upcoming reservations.</p>
@@ -65,7 +74,9 @@ function UserDetailModal({ user, onClose }) {
             {reservations.map((r) => (
               <div key={r.id} className="border border-gray-200 rounded-lg p-4 text-sm">
                 <p className="font-semibold text-gray-800">{formatDate(r.date)}</p>
-                <p className="text-gray-500">{formatMinutes(r.startMin)} - {formatMinutes(r.endMin)}</p>
+                <p className="text-gray-500">
+                  Desk# {r.deskNumber} &middot; {formatMinutes(r.startMin)} - {formatMinutes(r.endMin)}
+                </p>
               </div>
             ))}
           </div>
@@ -113,21 +124,41 @@ function MainTab({ users, selectedUserId, onSelectUser }) {
   );
 }
 
-const getAllReservationsSorted = () =>
-  [...mockReservations].sort((a, b) =>
-    a.date === b.date ? a.startMin - b.startMin : a.date.localeCompare(b.date)
-  );
-
+// Until the activity log table exists, this shows today's bookings as the
+// closest available record of system activity.
 function LogsTab() {
-  const logs = getAllReservationsSorted();
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+    getReservationsForDate(today)
+      .then((data) => { if (!cancelled) setLogs(data); })
+      .catch(() => { if (!cancelled) setLogs([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="bg-gray-200 rounded-2xl p-6 min-h-[300px] flex items-center justify-center">
+        <p className="text-gray-500 text-sm">Loading activity…</p>
+      </div>
+    );
+  }
 
   if (logs.length === 0) {
     return (
       <div className="bg-gray-200 rounded-2xl p-6 min-h-[300px] flex flex-col items-center justify-center gap-2 text-center">
         <ScrollText className="w-10 h-10 text-gray-400" />
-        <h2 className="text-lg font-semibold text-gray-700">No activity logs yet</h2>
+        <h2 className="text-lg font-semibold text-gray-700">No activity today</h2>
         <p className="text-gray-500 text-sm max-w-sm">
-          Reservation and admin activity will appear here once the system is connected to the backend.
+          Reservations made today will appear here.
         </p>
       </div>
     );
@@ -141,7 +172,9 @@ function LogsTab() {
           <div key={log.id} className="bg-white rounded-lg p-4 flex items-center justify-between gap-4">
             <div>
               <p className="font-semibold text-gray-800">{log.user}</p>
-              <p className="text-gray-500 text-sm">{formatDate(log.date)}</p>
+              <p className="text-gray-500 text-sm">
+                Desk# {log.deskNumber} &middot; {formatDate(log.date)}
+              </p>
             </div>
             <span className="text-mqd-title text-sm font-medium whitespace-nowrap">
               {formatMinutes(log.startMin)} - {formatMinutes(log.endMin)}
@@ -171,8 +204,18 @@ function RequestsTab() {
 export default function AdminDashboardPage() {
   const [activeTab, setActiveTab] = useState('main');
   const [selectedUser, setSelectedUser] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [usersError, setUsersError] = useState(null);
 
-  const users = mockUsers.slice(0, USERS_PER_PAGE);
+  useEffect(() => {
+    let cancelled = false;
+
+    getUsers()
+      .then((data) => { if (!cancelled) setUsers(data.slice(0, USERS_PER_PAGE)); })
+      .catch((err) => { if (!cancelled) setUsersError(err.message); });
+
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <div className="flex-1 flex flex-col items-center px-4 md:px-8 py-8 bg-white">
@@ -199,7 +242,13 @@ export default function AdminDashboardPage() {
         </div>
 
         {activeTab === 'main' && (
-          <MainTab users={users} selectedUserId={selectedUser?.id} onSelectUser={setSelectedUser} />
+          usersError ? (
+            <div className="bg-gray-200 rounded-2xl p-6 min-h-[200px] flex items-center justify-center text-center">
+              <p className="text-red-600 text-sm">{usersError}</p>
+            </div>
+          ) : (
+            <MainTab users={users} selectedUserId={selectedUser?.id} onSelectUser={setSelectedUser} />
+          )
         )}
         {activeTab === 'logs' && <LogsTab />}
         {activeTab === 'requests' && <RequestsTab />}

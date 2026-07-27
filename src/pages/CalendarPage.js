@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
-import { getBookingsForDate } from '../data/mockReservations';
+import { getReservationsForDate } from '../api/client';
 
 const CRUMBS = [
   { label: 'Landing', path: '/' },
@@ -18,8 +18,6 @@ const MONTHS = [
 const DAY_START = 480;  // 8:00 AM in minutes
 const DAY_END   = 990;  // 4:30 PM in minutes
 const INCREMENT = 30;   // 30-min slots
-
-const toMinutes = (h, m) => h * 60 + m;
 
 const formatMinutes = (mins) => {
   const h = Math.floor(mins / 60);
@@ -151,9 +149,34 @@ export default function CalendarPage() {
 
   const [selectedDate, setSelectedDate] = useState(initDate);
   const [selectedSlot, setSelectedSlot] = useState(null);
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const dateStr = selectedDate.toISOString().split('T')[0];
-  const bookings = getBookingsForDate(dateStr);
+  // Local calendar date — toISOString() converts to UTC and can roll the date.
+  const pad = (n) => String(n).padStart(2, '0');
+  const dateStr = `${selectedDate.getFullYear()}-${pad(selectedDate.getMonth() + 1)}-${pad(selectedDate.getDate())}`;
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    getReservationsForDate(dateStr)
+      .then((data) => {
+        if (!cancelled) setBookings(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    // Ignore a response that arrives after the user has moved to another date.
+    return () => { cancelled = true; };
+  }, [dateStr]);
+
   const availableSlots = getAvailableSlots(durationMins, bookings);
 
   const formattedDate = selectedDate.toLocaleDateString('en-US', {
@@ -185,7 +208,11 @@ export default function CalendarPage() {
           </div>
 
           <div key={dateStr} className="flex flex-col gap-2 max-h-80 overflow-y-auto pr-1 animate-fade-scale">
-            {availableSlots.length === 0 ? (
+            {loading ? (
+              <p className="text-center text-gray-400 text-sm py-6">Checking availability…</p>
+            ) : error ? (
+              <p className="text-center text-red-500 text-sm py-6">{error}</p>
+            ) : availableSlots.length === 0 ? (
               <p className="text-center text-gray-500 text-sm py-6">
                 No availability for {durationLabel} on this day.
               </p>
