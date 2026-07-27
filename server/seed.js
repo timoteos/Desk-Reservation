@@ -1,84 +1,114 @@
-// One-off script to port the frontend's mock data into real MongoDB documents.
+// Populates the database with the same fixtures the frontend mock files use,
+// so the app behaves identically once pages are wired to the API.
+//
 // Run with: npm run seed
 require('dotenv').config();
-const mongoose = require('mongoose');
-const User = require('./models/User');
-const Desk = require('./models/Desk');
-const Reservation = require('./models/Reservation');
+const { pool, query } = require('./db');
+const { generateConfirmationCode } = require('./lib/reservationShape');
 
-const slugEmail = (name) =>
-  `${name.toLowerCase().replace(/[^a-z]+/g, '.')}@dhs.hawaii.gov`;
-
-const mockUserNames = [
-  'Angello Portillo', 'Keanu Ishihara', 'Timoteo Sumalinog', 'Michael Barbieto',
-  'Penny Kabua', 'Mark Burgess', 'Rafael Abitz', 'Megan Yamamoto',
-  'Steve Elias', 'Cacie Sonomura', 'Travis Quensenberry', 'Keith Bangi',
-  'Phan Sirivattha', 'Rhona Ramos', 'Michael Mau', 'Marivic Baitalon',
+const USERS = [
+  ['Angello', 'Portillo'], ['Keanu', 'Ishihara'], ['Timoteo', 'Sumalinog'],
+  ['Michael', 'Barbieto'], ['Penny', 'Kabua'], ['Mark', 'Burgess'],
+  ['Rafael', 'Abitz'], ['Megan', 'Yamamoto'], ['Steve', 'Elias'],
+  ['Cacie', 'Sonomura'], ['Travis', 'Quensenberry'], ['Keith', 'Bangi'],
+  ['Phan', 'Sirivattha'], ['Rhona', 'Ramos'], ['Michael', 'Mau'],
+  ['Marivic', 'Baitalon'],
 ];
 
-const today = new Date();
-const fmt = (d) => d.toISOString().split('T')[0];
-const tomorrow = new Date(today);
-tomorrow.setDate(today.getDate() + 1);
-const dayAfter = new Date(today);
-dayAfter.setDate(today.getDate() + 2);
+const ADMIN = 'Timoteo Sumalinog';
+
+const emailFor = (first, last) =>
+  `${first.toLowerCase()}.${last.toLowerCase()}@dhs.hawaii.gov`;
+
+// Same bookings as src/data/mockReservations.js, relative to today.
+const dayOffset = (days) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+const at = (base, minutes) => {
+  const d = new Date(base);
+  d.setMinutes(minutes);
+  return d;
+};
+
+const RESERVATIONS = [
+  { name: 'Keanu Ishihara',   deskNumber: 1, dayOffset: 0, startMin: 600, endMin: 690 },
+  { name: 'Penny Kabua',      deskNumber: 2, dayOffset: 1, startMin: 540, endMin: 600 },
+  { name: 'Megan Yamamoto',   deskNumber: 3, dayOffset: 1, startMin: 780, endMin: 900 },
+  { name: 'Angello Portillo', deskNumber: 4, dayOffset: 2, startMin: 480, endMin: 720 },
+  { name: 'Rafael Abitz',     deskNumber: 5, dayOffset: 2, startMin: 810, endMin: 990 },
+];
 
 async function seed() {
-  await mongoose.connect(process.env.MONGODB_URI);
-  console.log('Connected to MongoDB');
+  await query('TRUNCATE reservations, users, desks, roles RESTART IDENTITY CASCADE');
+  console.log('Cleared existing data');
 
-  await Promise.all([
-    User.deleteMany({}),
-    Desk.deleteMany({}),
-    Reservation.deleteMany({}),
-  ]);
-  console.log('Cleared existing users, desks, and reservations');
+  const roleIds = {};
+  for (const roleType of ['member', 'admin', 'guest']) {
+    const { rows } = await query(
+      'INSERT INTO roles (role_type) VALUES ($1) RETURNING role_id',
+      [roleType]
+    );
+    roleIds[roleType] = rows[0].role_id;
+  }
+  console.log('Inserted 3 roles');
 
-  const users = await User.insertMany(
-    mockUserNames.map((name, i) => ({
-      name,
-      email: slugEmail(name),
-      role: i === 2 ? 'admin' : 'user', // Timoteo Sumalinog as the seeded admin
-    }))
+  const userIds = {};
+  for (const [first, last] of USERS) {
+    const fullName = `${first} ${last}`;
+    const { rows } = await query(
+      `INSERT INTO users (first_name, last_name, email, role_id)
+       VALUES ($1, $2, $3, $4) RETURNING user_id`,
+      [first, last, emailFor(first, last), roleIds[fullName === ADMIN ? 'admin' : 'member']]
+    );
+    userIds[fullName] = rows[0].user_id;
+  }
+  console.log(`Inserted ${USERS.length} users`);
+
+  const deskIds = {};
+  for (let number = 1; number <= 12; number += 1) {
+    const { rows } = await query(
+      'INSERT INTO desks (desk_number) VALUES ($1) RETURNING desk_id',
+      [number]
+    );
+    deskIds[number] = rows[0].desk_id;
+  }
+  console.log('Inserted 12 desks');
+
+  for (const r of RESERVATIONS) {
+    const base = dayOffset(r.dayOffset);
+    await query(
+      `INSERT INTO reservations
+         (user_id, desk_id, starts_at, ends_at, confirmation_code)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        userIds[r.name],
+        deskIds[r.deskNumber],
+        at(base, r.startMin),
+        at(base, r.endMin),
+        generateConfirmationCode(),
+      ]
+    );
+  }
+  console.log(`Inserted ${RESERVATIONS.length} reservations`);
+
+  const { rows } = await query(
+    `SELECT u.first_name || ' ' || u.last_name AS name, r.confirmation_code
+       FROM reservations r JOIN users u ON u.user_id = r.user_id
+      ORDER BY r.starts_at`
   );
-  console.log(`Inserted ${users.length} users`);
-
-  const desks = await Desk.insertMany(
-    Array.from({ length: 12 }, (_, i) => ({
-      number: i + 1,
-      label: `Desk# ${i + 1}`,
-      location: 'MQD System Office',
-    }))
-  );
-  console.log(`Inserted ${desks.length} desks`);
-
-  const byName = Object.fromEntries(users.map((u) => [u.name, u]));
-
-  const reservationSeeds = [
-    { code: '1', name: 'Keanu Ishihara', deskNumber: 1, date: fmt(today), startMin: 600, endMin: 690 },
-    { code: '2', name: 'Penny Kabua', deskNumber: 2, date: fmt(tomorrow), startMin: 540, endMin: 600 },
-    { code: '3', name: 'Megan Yamamoto', deskNumber: 3, date: fmt(tomorrow), startMin: 780, endMin: 900 },
-    { code: '4', name: 'Angello Portillo', deskNumber: 4, date: fmt(dayAfter), startMin: 480, endMin: 720 },
-    { code: '5', name: 'Rafael Abitz', deskNumber: 5, date: fmt(dayAfter), startMin: 810, endMin: 990 },
-  ];
-
-  const reservations = await Reservation.insertMany(
-    reservationSeeds.map((r) => ({
-      user: byName[r.name]._id,
-      desk: desks[r.deskNumber - 1]._id,
-      date: r.date,
-      startMin: r.startMin,
-      endMin: r.endMin,
-      confirmationCode: r.code,
-    }))
-  );
-  console.log(`Inserted ${reservations.length} reservations`);
-
-  await mongoose.disconnect();
-  console.log('Done seeding.');
+  console.log('\nConfirmation codes for testing:');
+  rows.forEach((row) => console.log(`  ${row.confirmation_code}  ${row.name}`));
 }
 
-seed().catch((err) => {
-  console.error('Seed failed:', err);
-  process.exit(1);
-});
+seed()
+  .then(() => pool.end())
+  .then(() => console.log('\nDone seeding.'))
+  .catch(async (err) => {
+    console.error('Seed failed:', err.message);
+    await pool.end();
+    process.exit(1);
+  });

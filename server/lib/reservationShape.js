@@ -1,0 +1,49 @@
+// Translates between the database's timestamp columns and the shape the React
+// pages already expect ({ date, startMin, endMin }). Keeping this conversion at
+// the API boundary means the frontend never sees database field names, and the
+// storage model can change without touching a component.
+
+const pad = (n) => String(n).padStart(2, '0');
+
+// Local calendar date as YYYY-MM-DD. Avoids toISOString(), which shifts to UTC
+// and can roll an early-morning Hawaii reservation onto the previous day.
+const toDateString = (d) =>
+  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+const toMinutes = (d) => d.getHours() * 60 + d.getMinutes();
+
+// Database row -> API response
+const rowToReservation = (row) => ({
+  id: String(row.reservation_id),
+  date: toDateString(row.starts_at),
+  startMin: toMinutes(row.starts_at),
+  endMin: toMinutes(row.ends_at),
+  status: row.status,
+  confirmationCode: row.confirmation_code,
+  user: row.first_name ? `${row.first_name} ${row.last_name}` : undefined,
+  userId: row.user_id,
+  deskNumber: row.desk_number,
+  deskId: row.desk_id,
+});
+
+// API request ({ date, startMin, endMin }) -> timestamps for the database
+const toTimestamps = (date, startMin, endMin) => {
+  const [year, month, day] = date.split('-').map(Number);
+  const startsAt = new Date(year, month - 1, day, Math.floor(startMin / 60), startMin % 60);
+  const endsAt = new Date(year, month - 1, day, Math.floor(endMin / 60), endMin % 60);
+  return { startsAt, endsAt };
+};
+
+// Unambiguous alphabet: no 0/O or 1/I/L, so codes survive being read aloud or
+// copied off a printout.
+const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+const generateConfirmationCode = (length = 8) => {
+  let code = '';
+  for (let i = 0; i < length; i += 1) {
+    code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+  }
+  return code;
+};
+
+module.exports = { rowToReservation, toTimestamps, generateConfirmationCode, toDateString };
