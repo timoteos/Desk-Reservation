@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const mongoose = require('mongoose');
+const { pool } = require('./db');
 
 const usersRouter = require('./routes/users');
 const desksRouter = require('./routes/desks');
@@ -17,15 +17,28 @@ app.use('/api/users', usersRouter);
 app.use('/api/desks', desksRouter);
 app.use('/api/reservations', reservationsRouter);
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/api/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ status: 'ok', database: 'connected' });
+  } catch (err) {
+    res.status(503).json({ status: 'error', database: 'unreachable' });
+  }
+});
 
-mongoose
-  .connect(process.env.MONGODB_URI)
+// Anything a route passes to next() lands here.
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ message: 'Internal server error' });
+});
+
+pool
+  .query('SELECT 1')
   .then(() => {
-    console.log('Connected to MongoDB');
+    console.log('Connected to PostgreSQL');
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })
   .catch((err) => {
-    console.error('MongoDB connection error:', err.message);
+    console.error('Database connection failed:', err.message);
     process.exit(1);
   });

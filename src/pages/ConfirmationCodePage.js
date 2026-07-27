@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Ticket, CheckCircle2, XCircle } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
-import mockReservations from '../data/mockReservations';
+import { getReservationByCode, ApiError } from '../api/client';
 
 const CRUMBS = [
   { label: 'Landing', path: '/' },
@@ -25,20 +25,33 @@ const formatDate = (dateStr) => {
 export default function ConfirmationCodePage() {
   const navigate = useNavigate();
   const [code, setCode] = useState('');
-  const [result, setResult] = useState(null); // null = untouched, 'found' | 'not-found'
+  const [result, setResult] = useState(null); // null | 'found' | 'not-found' | 'error'
   const [booking, setBooking] = useState(null);
+  const [errorMessage, setErrorMessage] = useState(null);
+  const [searching, setSearching] = useState(false);
 
-  const handleConfirm = (e) => {
+  const handleConfirm = async (e) => {
     e.preventDefault();
-    const match = mockReservations.find(
-      (r) => r.id.toLowerCase() === code.trim().toLowerCase()
-    );
-    if (match) {
-      setBooking(match);
+    if (searching) return;
+
+    setSearching(true);
+    setErrorMessage(null);
+
+    try {
+      const found = await getReservationByCode(code.trim());
+      setBooking(found);
       setResult('found');
-    } else {
+    } catch (err) {
       setBooking(null);
-      setResult('not-found');
+      // A 404 is an expected outcome here, not a failure worth alarming about.
+      if (err instanceof ApiError && err.status === 404) {
+        setResult('not-found');
+      } else {
+        setErrorMessage(err.message);
+        setResult('error');
+      }
+    } finally {
+      setSearching(false);
     }
   };
 
@@ -46,6 +59,7 @@ export default function ConfirmationCodePage() {
     setCode('');
     setResult(null);
     setBooking(null);
+    setErrorMessage(null);
   };
 
   return (
@@ -73,18 +87,18 @@ export default function ConfirmationCodePage() {
                 type="text"
                 value={code}
                 onChange={(e) => { setCode(e.target.value); setResult(null); }}
-                placeholder="e.g. 1"
-                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                placeholder="e.g. KS5CTVXU"
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-700 text-sm uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-mqd-btn"
               />
             </div>
 
             <div className="flex gap-3">
               <button
                 type="submit"
-                disabled={!code.trim()}
+                disabled={!code.trim() || searching}
                 className="flex-1 bg-mqd-btn hover:bg-mqd-btn-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg text-base transition"
               >
-                Confirm
+                {searching ? 'Looking up…' : 'Confirm'}
               </button>
               <button
                 type="button"
@@ -102,6 +116,7 @@ export default function ConfirmationCodePage() {
               <p className="text-mqd-title font-semibold">Reservation found</p>
               <div className="bg-gray-50 border border-gray-100 rounded-lg p-4 text-sm text-gray-700 w-full space-y-1 mt-2">
                 <p><span className="font-semibold text-mqd-title">Name:</span> {booking.user}</p>
+                <p><span className="font-semibold text-mqd-title">Desk:</span> Desk# {booking.deskNumber}</p>
                 <p><span className="font-semibold text-mqd-title">Date:</span> {formatDate(booking.date)}</p>
                 <p>
                   <span className="font-semibold text-mqd-title">Time:</span>{' '}
@@ -116,6 +131,14 @@ export default function ConfirmationCodePage() {
               <XCircle className="w-10 h-10 text-red-500" />
               <p className="text-red-500 font-semibold">No reservation found</p>
               <p className="text-gray-500 text-sm">Double-check your confirmation code and try again.</p>
+            </div>
+          )}
+
+          {result === 'error' && (
+            <div className="flex flex-col items-center gap-2 text-center py-2 border-t border-gray-100 pt-5">
+              <XCircle className="w-10 h-10 text-amber-500" />
+              <p className="text-amber-600 font-semibold">Couldn't complete the lookup</p>
+              <p className="text-gray-500 text-sm">{errorMessage}</p>
             </div>
           )}
 

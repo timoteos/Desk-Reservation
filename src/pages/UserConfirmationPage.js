@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Mail, CheckCircle2 } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
+import { createReservation } from '../api/client';
 
 const CRUMBS = [
   { label: 'Landing', path: '/' },
@@ -29,9 +30,12 @@ const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 export default function UserConfirmationPage() {
   const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
-  const [submitted, setSubmitted] = useState(false);
+  const [confirmation, setConfirmation] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
 
-  const deskId = searchParams.get('desk');
+  const deskId = searchParams.get('deskId');
+  const deskNumber = searchParams.get('deskNumber');
   const dateStr = searchParams.get('date') || '';
   const startMin = parseInt(searchParams.get('startMin') || '480', 10);
   const endMin = parseInt(searchParams.get('endMin') || '540', 10);
@@ -39,10 +43,27 @@ export default function UserConfirmationPage() {
   const dateLabel = formatDate(dateStr);
   const timeLabel = `${formatMinutes(startMin)} - ${formatMinutes(endMin)}`;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!isValidEmail(email)) return;
-    setSubmitted(true);
+    if (!isValidEmail(email) || submitting) return;
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const reservation = await createReservation({
+        email: email.trim(),
+        deskId: Number(deskId),
+        date: dateStr,
+        startMin,
+        endMin,
+      });
+      setConfirmation(reservation);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -58,7 +79,7 @@ export default function UserConfirmationPage() {
           </div>
 
           <div className="bg-gray-50 border border-gray-100 rounded-lg p-5 text-center text-sm text-gray-700 space-y-1">
-            <p><span className="font-semibold text-mqd-title">Desk:</span> Desk {deskId}</p>
+            <p><span className="font-semibold text-mqd-title">Desk:</span> Desk# {deskNumber}</p>
             <p><span className="font-semibold text-mqd-title">Location:</span> MQD System Office</p>
             <p>
               <span className="font-semibold text-mqd-title">Date & Time:</span>{' '}
@@ -66,11 +87,19 @@ export default function UserConfirmationPage() {
             </p>
           </div>
 
-          {submitted ? (
-            <div className="flex flex-col items-center gap-2 text-center py-4">
+          {confirmation ? (
+            <div className="flex flex-col items-center gap-3 text-center py-4">
               <CheckCircle2 className="w-10 h-10 text-mqd-title" />
-              <p className="text-mqd-title font-semibold">Request submitted</p>
-              <p className="text-gray-500 text-sm">A confirmation will be sent to {email}.</p>
+              <p className="text-mqd-title font-semibold">Reservation confirmed</p>
+              <div className="bg-mqd-btn/10 border border-mqd-btn/20 rounded-lg px-6 py-4 w-full">
+                <p className="text-gray-500 text-xs uppercase tracking-wide mb-1">Confirmation code</p>
+                <p className="text-mqd-title text-2xl font-bold tracking-[0.15em] font-mono">
+                  {confirmation.confirmationCode}
+                </p>
+              </div>
+              <p className="text-gray-500 text-sm">
+                Keep this code — you can use it to look up your reservation.
+              </p>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -90,12 +119,18 @@ export default function UserConfirmationPage() {
                 />
               </div>
 
+              {error && (
+                <p className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+                  {error}
+                </p>
+              )}
+
               <button
                 type="submit"
-                disabled={!isValidEmail(email)}
+                disabled={!isValidEmail(email) || submitting}
                 className="w-full bg-mqd-btn hover:bg-mqd-btn-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-4 rounded-lg text-base transition"
               >
-                Confirm and Request
+                {submitting ? 'Confirming…' : 'Confirm and Request'}
               </button>
             </form>
           )}

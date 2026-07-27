@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
+import { getDesks, getReservationsForDate } from '../api/client';
 
 const CRUMBS = [
   { label: 'Landing', path: '/' },
@@ -23,23 +24,29 @@ const formatDate = (dateStr) => {
   return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 };
 
-// Desk positions as % of image — left/top = CENTER of each cubicle,
-// measured from the actual floor plan pixels (bay pitch ~88px of 1388)
-// transform: translate(-50%, -50%) keeps the label centered on that point
-const DESKS = [
-  { id: 1,  label: 'Desk# 1',  status: 'booked',     left: '23.9%', top: '22%' },
-  { id: 2,  label: 'Desk# 2',  status: 'booked',     left: '30.3%', top: '22%' },
-  { id: 3,  label: 'Desk# 3',  status: 'booked',     left: '36.7%', top: '22%' },
-  { id: 4,  label: 'Desk# 4',  status: 'booked',     left: '43.1%', top: '22%' },
-  { id: 5,  label: 'Desk# 5',  status: 'booked',     left: '49.5%', top: '22%' },
-  { id: 6,  label: 'Desk# 6',  status: 'booked',     left: '55.8%', top: '22%' },
-  { id: 7,  label: 'Desk# 7',  status: 'available',  left: '62.3%', top: '22%' },
-  { id: 8,  label: 'Desk# 8',  status: 'available',  left: '68.6%', top: '22%' },
-  { id: 9,  label: 'Desk# 9',  status: 'available',  left: '51.6%', top: '75%' },
-  { id: 10, label: 'Desk# 10', status: 'available',  left: '58.2%', top: '75%' },
-  { id: 11, label: 'Desk# 11', status: 'available',  left: '64.4%', top: '75%' },
-  { id: 12, label: 'Desk# 12', status: 'available',  left: '71%',   top: '75%' },
-];
+// Desk positions as % of the floor plan image — left/top mark the CENTRE of
+// each cubicle, measured from the image pixels (bay pitch ~88px of 1388).
+// transform: translate(-50%, -50%) keeps the label centred on that point.
+//
+// Positions stay here rather than in the database until the admin map editor
+// exists; keyed by desk number so they survive the desks coming from the API.
+const DESK_POSITIONS = {
+  1:  { left: '23.9%', top: '22%' },
+  2:  { left: '30.3%', top: '22%' },
+  3:  { left: '36.7%', top: '22%' },
+  4:  { left: '43.1%', top: '22%' },
+  5:  { left: '49.5%', top: '22%' },
+  6:  { left: '55.8%', top: '22%' },
+  7:  { left: '62.3%', top: '22%' },
+  8:  { left: '68.6%', top: '22%' },
+  9:  { left: '51.6%', top: '75%' },
+  10: { left: '58.2%', top: '75%' },
+  11: { left: '64.4%', top: '75%' },
+  12: { left: '71%',   top: '75%' },
+};
+
+// Two ranges collide when each starts before the other ends.
+const overlaps = (aStart, aEnd, bStart, bEnd) => aStart < bEnd && aEnd > bStart;
 
 const deskColor = (status, selected) => {
   if (selected) return 'bg-mqd-title ring-2 ring-mqd-title/40';
@@ -52,10 +59,43 @@ export default function DeskSelectionPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [selectedDesk, setSelectedDesk] = useState(null);
+  const [desks, setDesks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const dateStr = searchParams.get('date') || '';
   const startMin = parseInt(searchParams.get('startMin') || '480', 10);
   const endMin = parseInt(searchParams.get('endMin') || '540', 10);
+
+  // A desk is unavailable when an existing booking overlaps the chosen window.
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    Promise.all([getDesks(), dateStr ? getReservationsForDate(dateStr) : Promise.resolve([])])
+      .then(([deskList, reservations]) => {
+        if (cancelled) return;
+        setDesks(
+          deskList.map((desk) => ({
+            ...desk,
+            status: reservations.some(
+              (r) => r.deskNumber === desk.number && overlaps(startMin, endMin, r.startMin, r.endMin)
+            )
+              ? 'booked'
+              : 'available',
+          }))
+        );
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [dateStr, startMin, endMin]);
 
   const dateLabel = formatDate(dateStr);
   const timeLabel = `${formatMinutes(startMin)} - ${formatMinutes(endMin)}`;
@@ -71,6 +111,12 @@ export default function DeskSelectionPage() {
           <h2 className="text-lg font-semibold text-mqd-title">{timeLabel}</h2>
         </div>
 
+        {error && (
+          <div className="w-full max-w-5xl bg-red-50 border border-red-200 text-red-700 rounded-xl px-6 py-4 text-sm">
+            {error}
+          </div>
+        )}
+
         {/* Floor plan with overlaid desks */}
         <div className="w-full max-w-5xl bg-white rounded-xl shadow-md border border-gray-100 p-3 opacity-0 animate-fade-up" style={{ animationDelay: '100ms' }}>
         <div className="relative">
@@ -81,8 +127,16 @@ export default function DeskSelectionPage() {
             className="block w-full h-auto rounded-lg border border-gray-200"
           />
 
+          {loading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-white/60 rounded-lg">
+              <p className="text-gray-600 text-sm font-medium">Checking desk availability…</p>
+            </div>
+          )}
+
           {/* Desk overlays */}
-          {DESKS.map((desk) => {
+          {desks.map((desk) => {
+            const position = DESK_POSITIONS[desk.number];
+            if (!position) return null;
             const isSelected = selectedDesk === desk.id;
             const clickable = desk.status !== 'booked';
             return (
@@ -94,8 +148,8 @@ export default function DeskSelectionPage() {
                   ${clickable ? 'cursor-pointer hover:brightness-110' : 'cursor-not-allowed'}
                 `}
                 style={{
-                  left: desk.left,
-                  top: desk.top,
+                  left: position.left,
+                  top: position.top,
                   transform: 'translate(-50%, -50%)',
                   width: '5.5%',
                   height: '10%',
@@ -104,7 +158,7 @@ export default function DeskSelectionPage() {
                 }}
               >
                 <span className="hidden sm:inline">{desk.label}</span>
-                <span className="sm:hidden">{desk.id}</span>
+                <span className="sm:hidden">{desk.number}</span>
               </div>
             );
           })}
@@ -136,7 +190,13 @@ export default function DeskSelectionPage() {
             disabled={!selectedDesk}
             onClick={() => {
               if (!selectedDesk) return;
-              navigate(`/request?desk=${selectedDesk}&date=${dateStr}&startMin=${startMin}&endMin=${endMin}`);
+              // deskId identifies the row for the booking; deskNumber is what a
+              // person recognises, so the confirmation page shows the latter.
+              const desk = desks.find((d) => d.id === selectedDesk);
+              navigate(
+                `/request?deskId=${selectedDesk}&deskNumber=${desk?.number ?? ''}` +
+                `&date=${dateStr}&startMin=${startMin}&endMin=${endMin}`
+              );
             }}
             className="bg-mqd-btn hover:bg-mqd-btn-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold px-8 py-3 rounded transition flex items-center gap-2"
           >
