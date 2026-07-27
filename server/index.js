@@ -6,6 +6,7 @@ const { pool } = require('./db');
 const usersRouter = require('./routes/users');
 const desksRouter = require('./routes/desks');
 const reservationsRouter = require('./routes/reservations');
+const recurringSchedulesRouter = require('./routes/recurringSchedules');
 
 const app = express();
 const PORT = process.env.SERVER_PORT || 5000;
@@ -16,6 +17,7 @@ app.use(express.json());
 app.use('/api/users', usersRouter);
 app.use('/api/desks', desksRouter);
 app.use('/api/reservations', reservationsRouter);
+app.use('/api/recurring-schedules', recurringSchedulesRouter);
 
 app.get('/api/health', async (req, res) => {
   try {

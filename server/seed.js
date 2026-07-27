@@ -17,7 +17,13 @@ const USERS = [
 
 const ADMIN = 'Timoteo Sumalinog';
 
+// Accounts whose address doesn't follow the first.last convention.
+const EMAIL_OVERRIDES = {
+  'Timoteo Sumalinog': 'tsumalinog-int@dhs.hawaii.gov',
+};
+
 const emailFor = (first, last) =>
+  EMAIL_OVERRIDES[`${first} ${last}`] ||
   `${first.toLowerCase()}.${last.toLowerCase()}@dhs.hawaii.gov`;
 
 // Same bookings as src/data/mockReservations.js, relative to today.
@@ -43,7 +49,9 @@ const RESERVATIONS = [
 ];
 
 async function seed() {
-  await query('TRUNCATE reservations, users, desks, roles RESTART IDENTITY CASCADE');
+  await query(
+    'TRUNCATE reservations, recurring_schedules, users, desks, roles RESTART IDENTITY CASCADE'
+  );
   console.log('Cleared existing data');
 
   const roleIds = {};
