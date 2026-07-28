@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, Mail, Eye, EyeOff } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
-import { login, storeSession } from '../api/client';
+import { login } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 const CRUMBS = [
   { label: 'Landing', path: '/' },
@@ -11,6 +12,7 @@ const CRUMBS = [
 
 export default function AdminLoginPage() {
   const navigate = useNavigate();
+  const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -30,8 +32,7 @@ export default function AdminLoginPage() {
         setError('That account is not an administrator.');
         return;
       }
-      storeSession(token);
-      localStorage.setItem('mqd.admin', JSON.stringify(user));
+      signIn(token, user);
       navigate('/admin/dashboard');
     } catch (err) {
       setError(err.message);

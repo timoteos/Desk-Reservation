@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, X, Check, LayoutGrid, ScrollText, Inbox, CalendarClock, LogOut } from 'lucide-react';
+import { Plus, X, Check, LayoutGrid, ScrollText, Inbox, CalendarClock } from 'lucide-react';
 import {
   getUsers,
   getUserReservations,
   getReservationsForDate,
   getRequests,
   decideRequest,
-  clearSession,
 } from '../api/client';
 
 const TABS = [
@@ -345,7 +344,6 @@ export default function AdminDashboardPage() {
   const [requestsLoading, setRequestsLoading] = useState(true);
   const [requestsError, setRequestsError] = useState(null);
   const [busyId, setBusyId] = useState(null);
-  const admin = JSON.parse(localStorage.getItem('mqd.admin') || 'null');
 
   useEffect(() => {
     let cancelled = false;
@@ -387,17 +385,6 @@ export default function AdminDashboardPage() {
   return (
     <div className="flex-1 flex flex-col items-center px-4 md:px-8 py-8 bg-white">
       <div className="w-full max-w-2xl">
-        {/* Signed-in admin */}
-        <div className="flex items-center justify-end mb-2">
-          <button
-            onClick={() => { clearSession(); window.location.assign(`${process.env.PUBLIC_URL}/admin/login`); }}
-            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-mqd-title transition"
-          >
-            <LogOut className="w-4 h-4" />
-            Sign out{admin ? ` (${admin.name})` : ''}
-          </button>
-        </div>
-
         {/* Tabs */}
         <div className="flex gap-2 mb-4">
           {TABS.map((tab) => {
