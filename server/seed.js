@@ -5,6 +5,12 @@
 require('dotenv').config();
 const { pool, query } = require('./db');
 const { generateConfirmationCode } = require('./lib/reservationShape');
+const { hashPassword } = require('./lib/auth');
+
+// A development fixture, not a credential. Printed on seed so it's findable,
+// and it only ever exists in a local database. Any real deployment must set a
+// different password before the account is reachable.
+const DEV_ADMIN_PASSWORD = 'mqd-dev-admin';
 
 const USERS = [
   ['Angello', 'Portillo'], ['Keanu', 'Ishihara'], ['Timoteo', 'Sumalinog'],
@@ -64,13 +70,24 @@ async function seed() {
   }
   console.log('Inserted 3 roles');
 
+  const adminHash = await hashPassword(DEV_ADMIN_PASSWORD);
+
   const userIds = {};
   for (const [first, last] of USERS) {
     const fullName = `${first} ${last}`;
+    const isAdmin = fullName === ADMIN;
     const { rows } = await query(
-      `INSERT INTO users (first_name, last_name, email, role_id)
-       VALUES ($1, $2, $3, $4) RETURNING user_id`,
-      [first, last, emailFor(first, last), roleIds[fullName === ADMIN ? 'admin' : 'member']]
+      `INSERT INTO users (first_name, last_name, email, role_id, password_hash)
+       VALUES ($1, $2, $3, $4, $5) RETURNING user_id`,
+      [
+        first,
+        last,
+        emailFor(first, last),
+        roleIds[isAdmin ? 'admin' : 'member'],
+        // Only the admin can sign in; members book by email and have no
+        // password until SSO or self-registration exists.
+        isAdmin ? adminHash : null,
+      ]
     );
     userIds[fullName] = rows[0].user_id;
   }
@@ -113,6 +130,10 @@ async function seed() {
   );
   console.log('\nConfirmation codes for testing:');
   rows.forEach((row) => console.log(`  ${row.confirmation_code}  ${row.name}`));
+
+  console.log('\nAdmin sign-in (development fixture — change before any real use):');
+  console.log(`  ${EMAIL_OVERRIDES[ADMIN]}`);
+  console.log(`  ${DEV_ADMIN_PASSWORD}`);
 }
 
 seed()

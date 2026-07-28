@@ -38,7 +38,26 @@ router.get('/', async (req, res, next) => {
         )
       : await query(`${SELECT_RESERVATION} ORDER BY r.starts_at`);
 
-    res.json(result.rows.map(rowToReservation));
+    const reservations = result.rows.map(rowToReservation);
+
+    // This endpoint is public because the calendar needs to know what's taken.
+    // Availability only requires which desk and when — returning names and
+    // confirmation codes would let anyone harvest codes and then look up other
+    // people's bookings. Identifying details are for administrators.
+    if (req.user?.role === 'admin') {
+      return res.json(reservations);
+    }
+
+    res.json(
+      reservations.map(({ id, date: d, startMin: s, endMin: e, deskNumber, deskId }) => ({
+        id,
+        date: d,
+        startMin: s,
+        endMin: e,
+        deskNumber,
+        deskId,
+      }))
+    );
   } catch (err) {
     next(err);
   }

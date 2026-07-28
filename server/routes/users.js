@@ -1,8 +1,12 @@
 const express = require('express');
 const { query } = require('../db');
 const { rowToReservation } = require('../lib/reservationShape');
+const { requireAdmin } = require('../lib/auth');
 
 const router = express.Router();
+
+// Listing staff and their bookings is administrative.
+router.use(requireAdmin);
 
 // GET /api/users
 router.get('/', async (req, res, next) => {
