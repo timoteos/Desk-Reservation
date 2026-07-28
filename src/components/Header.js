@@ -1,5 +1,5 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Lock, LogOut, UserRound } from 'lucide-react';
+import { Lock, LogOut, UserRound, LayoutDashboard } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Header() {
@@ -10,6 +10,7 @@ export default function Header() {
   // On the login page the button would link to the page you're already on.
   // The breadcrumb there still offers the way back.
   const onLoginPage = pathname === '/admin/login';
+  const onDashboard = pathname === '/admin/dashboard';
 
   const handleSignOut = () => {
     signOut();
@@ -36,8 +37,19 @@ export default function Header() {
       </Link>
       {admin ? (
         <div className="flex items-center gap-2 shrink-0">
+          {/* The way back into the admin area. Without this, signing in and
+              then navigating home leaves no route to the dashboard at all. */}
+          {!onDashboard && (
+            <Link
+              to="/admin/dashboard"
+              className="flex items-center gap-1.5 text-sm font-medium text-mqd-title border border-mqd-title/30 rounded-full px-3 py-1.5 hover:bg-mqd-title/10 transition"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Dashboard</span>
+            </Link>
+          )}
           {/* Name is supporting detail, so it drops first on narrow screens. */}
-          <span className="hidden md:flex items-center gap-1.5 text-sm text-gray-500 max-w-[12rem] truncate">
+          <span className="hidden lg:flex items-center gap-1.5 text-sm text-gray-500 max-w-[10rem] truncate">
             <UserRound className="w-3.5 h-3.5 shrink-0" />
             {admin.name}
           </span>
