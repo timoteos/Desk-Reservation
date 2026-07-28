@@ -90,6 +90,15 @@ router.post('/', async (req, res, next) => {
 
     const { startsAt, endsAt } = toTimestamps(date, startMin, endMin);
 
+    // A booking in the past would get an expires_at already behind us and be
+    // swept the moment it's created, so refuse it here with a real reason
+    // rather than letting it vanish silently.
+    if (startsAt <= new Date()) {
+      return res.status(400).json({
+        message: 'That time has already passed. Pick a later slot.',
+      });
+    }
+
     // No desk chosen: pick one at random from those free for this window.
     // Random rather than lowest-numbered so bookings spread across the office
     // instead of piling onto Desk# 1.

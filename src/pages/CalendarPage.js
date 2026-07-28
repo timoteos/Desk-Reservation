@@ -27,11 +27,16 @@ const formatMinutes = (mins) => {
   return `${hour}:${m.toString().padStart(2, '0')} ${ampm}`;
 };
 
-// Returns all available start times for a given duration and date's bookings
-const getAvailableSlots = (durationMins, bookings) => {
+// Available start times for a duration, given the day's existing bookings.
+//
+// `earliestMin` drops slots that have already started — without it the day's
+// full 8:00–4:30 range is offered even at 4pm, and booking a slot in the past
+// produces a request that expires the moment it's made.
+const getAvailableSlots = (durationMins, bookings, earliestMin = 0) => {
   const slots = [];
   for (let start = DAY_START; start + durationMins <= DAY_END; start += INCREMENT) {
     const end = start + durationMins;
+    if (start < earliestMin) continue;
     const hasConflict = bookings.some(
       (b) => start < b.endMin && end > b.startMin
     );
@@ -177,7 +182,12 @@ export default function CalendarPage() {
     return () => { cancelled = true; };
   }, [dateStr]);
 
-  const availableSlots = getAvailableSlots(durationMins, bookings);
+  // Only today is constrained by the clock; future dates offer the full day.
+  const now = new Date();
+  const isToday = dateStr === `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const earliestMin = isToday ? now.getHours() * 60 + now.getMinutes() : 0;
+
+  const availableSlots = getAvailableSlots(durationMins, bookings, earliestMin);
 
   const formattedDate = selectedDate.toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',

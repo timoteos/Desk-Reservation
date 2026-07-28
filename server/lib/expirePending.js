@@ -50,16 +50,26 @@ async function expirePending() {
   return { reservations: reservations.rowCount, schedules: schedules.rowCount };
 }
 
-// LEAST(created + 24h, starts - 2h). For a recurring pattern, `startsAt` is the
-// first occurrence — basing it on each one would kill a 90-day schedule as soon
-// as its first Monday passed.
+// Normally LEAST(created + 24h, starts - 2h). For a recurring pattern,
+// `startsAt` is the first occurrence — basing it on each one would kill a
+// 90-day schedule as soon as its first Monday passed.
 const PENDING_WINDOW_MS = 24 * 60 * 60 * 1000;
 const LEAD_TIME_MS = 2 * 60 * 60 * 1000;
+// A request booked close to its start time would otherwise land on an
+// expires_at already behind us and be swept immediately. Give the admin a
+// short window instead, bounded by the reservation itself.
+const MIN_REVIEW_MS = 15 * 60 * 1000;
 
 function expiryFor(startsAt) {
-  const twentyFourHours = new Date(Date.now() + PENDING_WINDOW_MS);
-  const beforeStart = new Date(new Date(startsAt).getTime() - LEAD_TIME_MS);
-  return beforeStart < twentyFourHours ? beforeStart : twentyFourHours;
+  const now = Date.now();
+  const start = new Date(startsAt).getTime();
+
+  let expires = Math.min(now + PENDING_WINDOW_MS, start - LEAD_TIME_MS);
+
+  if (expires < now + MIN_REVIEW_MS) {
+    expires = Math.min(now + MIN_REVIEW_MS, start);
+  }
+  return new Date(expires);
 }
 
 module.exports = { expirePending, expiryFor };
