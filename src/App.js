@@ -10,10 +10,12 @@ import ConfirmationCodePage from './pages/ConfirmationCodePage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import RecurringSchedulePage from './pages/RecurringSchedulePage';
 import RequireAdmin from './components/RequireAdmin';
+import { AuthProvider } from './context/AuthContext';
 
 export default function App() {
   return (
-    <BrowserRouter basename={process.env.PUBLIC_URL}>
+    <AuthProvider>
+      <BrowserRouter basename={process.env.PUBLIC_URL}>
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<LandingPage />} />
@@ -34,6 +36,7 @@ export default function App() {
           <Route path="/recurring-schedule" element={<RecurringSchedulePage />} />
         </Route>
       </Routes>
-    </BrowserRouter>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }

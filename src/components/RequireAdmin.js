@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { getCurrentAdmin, getStoredToken, clearSession } from '../api/client';
+import { getCurrentAdmin, getStoredToken } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 // Gates the admin routes. This is a convenience, not the security boundary —
 // every admin endpoint checks the token server side, so a user who bypasses
 // this gets an empty dashboard and 401s rather than access.
 export default function RequireAdmin({ children }) {
+  const { signOut } = useAuth();
   const [state, setState] = useState(getStoredToken() ? 'checking' : 'denied');
 
   useEffect(() => {
@@ -20,18 +22,18 @@ export default function RequireAdmin({ children }) {
         if (admin.role === 'admin') {
           setState('allowed');
         } else {
-          clearSession();
+          signOut();
           setState('denied');
         }
       })
       .catch(() => {
         if (cancelled) return;
-        clearSession();
+        signOut();
         setState('denied');
       });
 
     return () => { cancelled = true; };
-  }, [state]);
+  }, [state, signOut]);
 
   if (state === 'checking') {
     return (
