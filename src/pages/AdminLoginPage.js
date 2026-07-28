@@ -16,7 +16,10 @@ export default function AdminLoginPage() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Admin auth not wired up yet — navigates straight to the dashboard.
+    // No real authentication yet — the password isn't checked and the dashboard
+    // is reachable directly. Remembering the email lets approvals be attributed
+    // to whoever signed in, which is the useful half until sessions exist.
+    localStorage.setItem('mqd.adminEmail', email.trim());
     navigate('/admin/dashboard');
   };
 

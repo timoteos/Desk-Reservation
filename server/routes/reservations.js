@@ -5,6 +5,7 @@ const {
   toTimestamps,
   generateConfirmationCode,
 } = require('../lib/reservationShape');
+const { expirePending, expiryFor } = require('../lib/expirePending');
 
 const router = express.Router();
 
@@ -21,6 +22,10 @@ const SELECT_RESERVATION = `
 // GET /api/reservations?date=YYYY-MM-DD
 router.get('/', async (req, res, next) => {
   try {
+    // Stale pending requests still hold their desk, so clear them before
+    // reporting what's booked.
+    await expirePending();
+
     const { date } = req.query;
     const result = date
       ? await query(
@@ -85,6 +90,15 @@ router.post('/', async (req, res, next) => {
 
     const { startsAt, endsAt } = toTimestamps(date, startMin, endMin);
 
+    // A booking in the past would get an expires_at already behind us and be
+    // swept the moment it's created, so refuse it here with a real reason
+    // rather than letting it vanish silently.
+    if (startsAt <= new Date()) {
+      return res.status(400).json({
+        message: 'That time has already passed. Pick a later slot.',
+      });
+    }
+
     // No desk chosen: pick one at random from those free for this window.
     // Random rather than lowest-numbered so bookings spread across the office
     // instead of piling onto Desk# 1.
@@ -113,10 +127,17 @@ router.post('/', async (req, res, next) => {
 
     const inserted = await query(
       `INSERT INTO reservations
-         (user_id, desk_id, starts_at, ends_at, confirmation_code)
-       VALUES ($1, $2, $3, $4, $5)
+         (user_id, desk_id, starts_at, ends_at, confirmation_code, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING reservation_id`,
-      [resolvedUserId, resolvedDeskId, startsAt, endsAt, generateConfirmationCode()]
+      [
+        resolvedUserId,
+        resolvedDeskId,
+        startsAt,
+        endsAt,
+        generateConfirmationCode(),
+        expiryFor(startsAt),
+      ]
     );
 
     const result = await query(

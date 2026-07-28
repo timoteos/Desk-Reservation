@@ -101,7 +101,11 @@ export default function UserConfirmationPage() {
           {confirmation ? (
             <div className="flex flex-col items-center gap-3 text-center py-4">
               <CheckCircle2 className="w-10 h-10 text-mqd-title" />
-              <p className="text-mqd-title font-semibold">Reservation confirmed</p>
+              <p className="text-mqd-title font-semibold">Request submitted</p>
+              <p className="text-gray-500 text-sm">
+                An administrator will review it. Requests not reviewed within 24
+                hours are released so the desk doesn't stay held.
+              </p>
               <div className="bg-mqd-btn/10 border border-mqd-btn/20 rounded-lg px-6 py-4 w-full">
                 <p className="text-gray-500 text-xs uppercase tracking-wide mb-1">Confirmation code</p>
                 <p className="text-mqd-title text-2xl font-bold tracking-[0.15em] font-mono">

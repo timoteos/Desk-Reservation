@@ -1,6 +1,7 @@
 const express = require('express');
 const { pool, query } = require('../db');
 const { generateConfirmationCode, toDateString } = require('../lib/reservationShape');
+const { expiryFor } = require('../lib/expirePending');
 
 const router = express.Router();
 
@@ -71,15 +72,27 @@ router.post('/', async (req, res, next) => {
         return res.status(400).json({ message: `End time must be after start time on ${dayKey}.` });
       }
       for (const date of occurrencesFor([dayNumber], HORIZON_DAYS)) {
+        const startsAt = atTime(date, times.startMin);
+        // Skip an occurrence whose time has already passed today — otherwise a
+        // Monday pattern submitted on Monday afternoon generates a slot for
+        // that morning, and expiry (2h before the first occurrence) lands in
+        // the past, killing the whole request the moment it's made.
+        if (startsAt <= new Date()) continue;
         slots.push({
           dayKey,
           dayNumber,
-          startsAt: atTime(date, times.startMin),
+          startsAt,
           endsAt: atTime(date, times.endMin),
           startMin: times.startMin,
           endMin: times.endMin,
         });
       }
+    }
+
+    if (slots.length === 0) {
+      return res.status(400).json({
+        message: 'Every occurrence in that pattern has already passed. Try starting next week.',
+      });
     }
 
     const deskResult = await client.query(
@@ -114,14 +127,22 @@ router.post('/', async (req, res, next) => {
 
     await client.query('BEGIN');
 
-    // Schedules are created approved for now. Once the approval queue exists
-    // this becomes 'pending' and generation moves to the approval step.
+    // Expiry is based on the FIRST occurrence across the whole pattern —
+    // per-occurrence would kill a 90-day schedule once its first Monday passed.
+    const firstOccurrence = slots.reduce(
+      (earliest, s) => (s.startsAt < earliest ? s.startsAt : earliest),
+      slots[0].startsAt
+    );
+    const expiresAt = expiryFor(firstOccurrence);
+
+    // Pending: the bookings below are generated immediately so the slots are
+    // held from the moment of request, then flip to approved in one action.
     const scheduleIds = {};
     for (const [dayKey, times] of Object.entries(days)) {
       const { rows } = await client.query(
         `INSERT INTO recurring_schedules
-           (user_id, desk_id, day_of_week, start_time, end_time, status)
-         VALUES ($1, $2, $3, $4, $5, 'approved')
+           (user_id, desk_id, day_of_week, start_time, end_time, status, expires_at)
+         VALUES ($1, $2, $3, $4, $5, 'pending', $6)
          RETURNING schedule_id`,
         [
           userId,
@@ -129,6 +150,7 @@ router.post('/', async (req, res, next) => {
           DAY_NUMBERS[dayKey],
           minutesToTime(times.startMin),
           minutesToTime(times.endMin),
+          expiresAt,
         ]
       );
       scheduleIds[dayKey] = rows[0].schedule_id;
@@ -143,8 +165,8 @@ router.post('/', async (req, res, next) => {
         await client.query('SAVEPOINT occurrence');
         await client.query(
           `INSERT INTO reservations
-             (user_id, desk_id, schedule_id, starts_at, ends_at, confirmation_code)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
+             (user_id, desk_id, schedule_id, starts_at, ends_at, confirmation_code, expires_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [
             userId,
             best.desk_id,
@@ -152,6 +174,7 @@ router.post('/', async (req, res, next) => {
             slot.startsAt,
             slot.endsAt,
             generateConfirmationCode(),
+            expiresAt,
           ]
         );
         await client.query('RELEASE SAVEPOINT occurrence');
@@ -169,6 +192,8 @@ router.post('/', async (req, res, next) => {
     await client.query('COMMIT');
 
     res.status(201).json({
+      status: 'pending',
+      expiresAt,
       deskNumber: best.desk_number,
       horizonDays: HORIZON_DAYS,
       created: created.length,

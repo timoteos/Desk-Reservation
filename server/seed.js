@@ -89,9 +89,12 @@ async function seed() {
   for (const r of RESERVATIONS) {
     const base = dayOffset(r.dayOffset);
     await query(
+      // Approved, not pending: these represent bookings that already exist, so
+      // the calendar shows realistic occupancy. Pending would put five requests
+      // nobody made into the approval queue.
       `INSERT INTO reservations
-         (user_id, desk_id, starts_at, ends_at, confirmation_code)
-       VALUES ($1, $2, $3, $4, $5)`,
+         (user_id, desk_id, starts_at, ends_at, confirmation_code, status)
+       VALUES ($1, $2, $3, $4, $5, 'approved')`,
       [
         userIds[r.name],
         deskIds[r.deskNumber],
