@@ -1,6 +1,12 @@
-import { useState, useEffect } from 'react';
-import { Plus, X, LayoutGrid, ScrollText, Inbox, CalendarClock } from 'lucide-react';
-import { getUsers, getUserReservations, getReservationsForDate } from '../api/client';
+import { useState, useEffect, useCallback } from 'react';
+import { Plus, X, Check, LayoutGrid, ScrollText, Inbox, CalendarClock } from 'lucide-react';
+import {
+  getUsers,
+  getUserReservations,
+  getReservationsForDate,
+  getRequests,
+  decideRequest,
+} from '../api/client';
 
 const TABS = [
   { key: 'main', label: 'Main', icon: LayoutGrid },
@@ -189,14 +195,133 @@ function LogsTab() {
   );
 }
 
-function RequestsTab() {
+// How long until a pending request lapses, phrased for someone triaging a queue.
+const untilExpiry = (expiresAt) => {
+  if (!expiresAt) return null;
+  const minutes = Math.round((new Date(expiresAt) - Date.now()) / 60000);
+  if (minutes <= 0) return 'expiring now';
+  if (minutes < 60) return `${minutes}m left`;
+  const hours = Math.round(minutes / 60);
+  return hours < 24 ? `${hours}h left` : `${Math.round(hours / 24)}d left`;
+};
+
+function RequestCard({ request, onDecide, busy }) {
+  const isRecurring = request.kind === 'recurring';
+  const remaining = untilExpiry(request.expiresAt);
+
   return (
-    <div className="bg-gray-200 rounded-2xl p-6 min-h-[300px] flex flex-col items-center justify-center gap-2 text-center">
-      <Inbox className="w-10 h-10 text-gray-400" />
-      <h2 className="text-lg font-semibold text-gray-700">No pending requests</h2>
-      <p className="text-gray-500 text-sm max-w-sm">
-        New desk requests awaiting admin approval will show up here.
-      </p>
+    <div className="bg-white rounded-lg p-4 flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-semibold text-gray-800">{request.name}</p>
+            {request.role === 'guest' && (
+              <span className="text-xs font-semibold uppercase tracking-wide text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
+                Guest
+              </span>
+            )}
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+              {isRecurring ? 'Recurring' : 'One-off'}
+            </span>
+          </div>
+          <p className="text-gray-500 text-xs mt-0.5">{request.email}</p>
+        </div>
+        {remaining && (
+          <span className="text-xs text-gray-500 whitespace-nowrap">{remaining}</span>
+        )}
+      </div>
+
+      <div className="text-sm text-gray-700">
+        {isRecurring ? (
+          <>
+            <p className="text-gray-500 text-xs mb-1">
+              Desk# {request.deskNumber} &middot; {request.bookingCount} bookings
+            </p>
+            {request.pattern.map((p) => (
+              <p key={p.day}>
+                <span className="font-medium">{p.day}</span>{' '}
+                {formatMinutes(p.startMin)} - {formatMinutes(p.endMin)}
+              </p>
+            ))}
+          </>
+        ) : (
+          <>
+            <p className="font-medium">{formatDate(request.date)}</p>
+            <p className="text-gray-500">
+              Desk# {request.deskNumber} &middot; {formatMinutes(request.startMin)} -{' '}
+              {formatMinutes(request.endMin)}
+            </p>
+          </>
+        )}
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          disabled={busy}
+          onClick={() => onDecide(request, 'approved')}
+          className="flex-1 bg-mqd-btn hover:bg-mqd-btn-hover disabled:opacity-40 text-white text-sm font-semibold py-2 rounded transition flex items-center justify-center gap-1.5"
+        >
+          <Check className="w-4 h-4" />
+          Approve
+        </button>
+        <button
+          disabled={busy}
+          onClick={() => onDecide(request, 'denied')}
+          className="flex-1 bg-white border border-gray-300 hover:bg-gray-50 disabled:opacity-40 text-gray-700 text-sm font-semibold py-2 rounded transition flex items-center justify-center gap-1.5"
+        >
+          <X className="w-4 h-4" />
+          Deny
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RequestsTab({ requests, loading, error, onDecide, busyId }) {
+  if (loading) {
+    return (
+      <div className="bg-gray-200 rounded-2xl p-6 min-h-[300px] flex items-center justify-center">
+        <p className="text-gray-500 text-sm">Loading requests…</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-gray-200 rounded-2xl p-6 min-h-[300px] flex items-center justify-center text-center">
+        <p className="text-red-600 text-sm">{error}</p>
+      </div>
+    );
+  }
+
+  if (requests.length === 0) {
+    return (
+      <div className="bg-gray-200 rounded-2xl p-6 min-h-[300px] flex flex-col items-center justify-center gap-2 text-center">
+        <Inbox className="w-10 h-10 text-gray-400" />
+        <h2 className="text-lg font-semibold text-gray-700">Nothing awaiting approval</h2>
+        <p className="text-gray-500 text-sm max-w-sm">
+          New desk requests appear here. Unanswered requests lapse after 24 hours
+          so they don't hold a desk indefinitely.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-gray-200 rounded-2xl p-6">
+      <h1 className="text-2xl font-bold text-gray-800 tracking-wide mb-5">
+        PENDING REQUESTS
+      </h1>
+      <div className="flex flex-col gap-3">
+        {requests.map((request) => (
+          <RequestCard
+            key={`${request.kind}-${request.id}`}
+            request={request}
+            onDecide={onDecide}
+            busy={busyId === `${request.kind}-${request.id}`}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -207,6 +332,11 @@ export default function AdminDashboardPage() {
   const [users, setUsers] = useState([]);
   const [usersError, setUsersError] = useState(null);
 
+  const [requests, setRequests] = useState([]);
+  const [requestsLoading, setRequestsLoading] = useState(true);
+  const [requestsError, setRequestsError] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -216,6 +346,33 @@ export default function AdminDashboardPage() {
 
     return () => { cancelled = true; };
   }, []);
+
+  // Loaded on mount rather than on tab switch, so the badge count is visible
+  // without the admin having to open the tab first.
+  const loadRequests = useCallback(() => {
+    setRequestsError(null);
+    return getRequests()
+      .then(setRequests)
+      .catch((err) => setRequestsError(err.message))
+      .finally(() => setRequestsLoading(false));
+  }, []);
+
+  useEffect(() => { loadRequests(); }, [loadRequests]);
+
+  const handleDecide = async (request, decision) => {
+    const key = `${request.kind}-${request.id}`;
+    setBusyId(key);
+    try {
+      await decideRequest(request.kind, request.id, decision);
+      await loadRequests();
+    } catch (err) {
+      setRequestsError(err.message);
+      // Another admin may have decided it, or it lapsed — resync either way.
+      await loadRequests();
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   return (
     <div className="flex-1 flex flex-col items-center px-4 md:px-8 py-8 bg-white">
@@ -236,6 +393,11 @@ export default function AdminDashboardPage() {
               >
                 <Icon className="w-4 h-4" />
                 {tab.label}
+                {tab.key === 'requests' && requests.length > 0 && (
+                  <span className="ml-0.5 bg-mqd-btn text-white text-xs font-bold rounded-full min-w-[1.25rem] h-5 px-1.5 flex items-center justify-center">
+                    {requests.length}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -251,7 +413,15 @@ export default function AdminDashboardPage() {
           )
         )}
         {activeTab === 'logs' && <LogsTab />}
-        {activeTab === 'requests' && <RequestsTab />}
+        {activeTab === 'requests' && (
+          <RequestsTab
+            requests={requests}
+            loading={requestsLoading}
+            error={requestsError}
+            onDecide={handleDecide}
+            busyId={busyId}
+          />
+        )}
       </div>
 
       <UserDetailModal user={selectedUser} onClose={() => setSelectedUser(null)} />

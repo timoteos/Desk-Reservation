@@ -22,6 +22,24 @@ const formatDate = (dateStr) => {
   return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 };
 
+// 'expired' reads as jargon to someone checking a code, so it's phrased as
+// what actually happened to them.
+const STATUS_LABELS = {
+  pending: 'Awaiting approval',
+  approved: 'Confirmed',
+  denied: 'Denied',
+  expired: 'Not reviewed in time',
+  canceled: 'Canceled',
+};
+
+const STATUS_STYLES = {
+  pending: 'bg-amber-100 text-amber-800',
+  approved: 'bg-emerald-100 text-emerald-800',
+  denied: 'bg-red-100 text-red-800',
+  expired: 'bg-gray-200 text-gray-700',
+  canceled: 'bg-gray-200 text-gray-700',
+};
+
 export default function ConfirmationCodePage() {
   const navigate = useNavigate();
   const [code, setCode] = useState('');
@@ -121,6 +139,12 @@ export default function ConfirmationCodePage() {
                 <p>
                   <span className="font-semibold text-mqd-title">Time:</span>{' '}
                   {formatMinutes(booking.startMin)} - {formatMinutes(booking.endMin)}
+                </p>
+                <p className="flex items-center gap-2 pt-1">
+                  <span className="font-semibold text-mqd-title">Status:</span>
+                  <span className={`text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded ${STATUS_STYLES[booking.status] || 'bg-gray-100 text-gray-600'}`}>
+                    {STATUS_LABELS[booking.status] || booking.status}
+                  </span>
                 </p>
               </div>
             </div>

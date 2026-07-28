@@ -52,6 +52,14 @@ export const createRecurringSchedule = (payload) =>
 
 export const getDesks = () => request('/api/desks');
 
+export const getRequests = () => request('/api/requests');
+
+export const decideRequest = (kind, id, decision) =>
+  request(`/api/requests/${kind === 'recurring' ? 'recurring' : 'one-off'}/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ decision }),
+  });
+
 export const getUsers = () => request('/api/users');
 
 export const getUserReservations = (userId) =>

@@ -106,10 +106,11 @@ export default function RecurringSchedulePage() {
           {result ? (
             <div className="flex flex-col items-center gap-2 text-center py-6">
               <CheckCircle2 className="w-10 h-10 text-mqd-title" />
-              <p className="text-mqd-title font-semibold">Recurring schedule created</p>
+              <p className="text-mqd-title font-semibold">Request submitted</p>
               <p className="text-gray-600 text-sm">
                 Desk# {result.deskNumber} &middot; {result.created} booking
-                {result.created === 1 ? '' : 's'} over the next {result.horizonDays} days
+                {result.created === 1 ? '' : 's'} over the next {result.horizonDays} days,
+                pending approval
               </p>
               <div className="text-gray-500 text-sm w-full space-y-1 mt-2">
                 {selectedDays.map((d) => (

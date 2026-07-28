@@ -2,11 +2,13 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { pool } = require('./db');
+const { expirePending } = require('./lib/expirePending');
 
 const usersRouter = require('./routes/users');
 const desksRouter = require('./routes/desks');
 const reservationsRouter = require('./routes/reservations');
 const recurringSchedulesRouter = require('./routes/recurringSchedules');
+const requestsRouter = require('./routes/requests');
 
 const app = express();
 const PORT = process.env.SERVER_PORT || 5000;
@@ -18,6 +20,7 @@ app.use('/api/users', usersRouter);
 app.use('/api/desks', desksRouter);
 app.use('/api/reservations', reservationsRouter);
 app.use('/api/recurring-schedules', recurringSchedulesRouter);
+app.use('/api/requests', requestsRouter);
 
 app.get('/api/health', async (req, res) => {
   try {
@@ -38,7 +41,10 @@ pool
   .query('SELECT 1')
   .then(() => {
     console.log('Connected to PostgreSQL');
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    // Clear anything that lapsed while the server was down.
+    return expirePending().then(() => {
+      app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    });
   })
   .catch((err) => {
     console.error('Database connection failed:', err.message);
