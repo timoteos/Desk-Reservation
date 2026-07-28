@@ -1,6 +1,7 @@
 const express = require('express');
 const { pool, query } = require('../db');
 const { expirePending } = require('../lib/expirePending');
+const { toTimestamps, generateConfirmationCode } = require('../lib/reservationShape');
 const { requireAdmin } = require('../lib/auth');
 
 const router = express.Router();
@@ -98,6 +99,79 @@ router.get('/', async (req, res, next) => {
 // The acting admin comes from the verified token. A client-supplied email is
 // not trusted for attribution — anyone could claim to be anyone.
 const resolveDecider = (req) => req.user?.sub ?? null;
+
+// POST /api/requests/book   { userId, deskId?, date, startMin, endMin }
+//
+// An admin booking, for themselves or on someone's behalf. Created approved
+// rather than pending: the admin is the approver, so routing it through their
+// own queue would be theatre. Recorded as decided by them for the audit trail.
+router.post('/book', async (req, res, next) => {
+  try {
+    const { userId, deskId, date, startMin, endMin } = req.body;
+
+    if (!userId || !date || startMin == null || endMin == null) {
+      return res.status(400).json({
+        message: 'userId, date, startMin and endMin are required',
+      });
+    }
+
+    const { startsAt, endsAt } = toTimestamps(date, startMin, endMin);
+
+    if (endsAt <= startsAt) {
+      return res.status(400).json({ message: 'End time must be after start time.' });
+    }
+    if (startsAt <= new Date()) {
+      return res.status(400).json({ message: 'That time has already passed. Pick a later slot.' });
+    }
+
+    let resolvedDeskId = deskId;
+    if (!resolvedDeskId) {
+      const { rows } = await query(
+        `SELECT desk_id FROM desks d
+          WHERE d.is_active
+            AND NOT EXISTS (
+              SELECT 1 FROM reservations r
+               WHERE r.desk_id = d.desk_id
+                 AND r.status IN ('pending', 'approved')
+                 AND tsrange(r.starts_at, r.ends_at) && tsrange($1, $2)
+            )
+          ORDER BY random() LIMIT 1`,
+        [startsAt, endsAt]
+      );
+      if (rows.length === 0) {
+        return res.status(409).json({
+          message: 'Every desk is booked for that time. Try a different slot.',
+        });
+      }
+      resolvedDeskId = rows[0].desk_id;
+    }
+
+    const { rows } = await query(
+      `INSERT INTO reservations
+         (user_id, desk_id, starts_at, ends_at, confirmation_code,
+          status, decided_by_user_id, decided_at)
+       VALUES ($1, $2, $3, $4, $5, 'approved', $6, now())
+       RETURNING reservation_id, confirmation_code`,
+      [userId, resolvedDeskId, startsAt, endsAt, generateConfirmationCode(), resolveDecider(req)]
+    );
+
+    const deskRow = await query('SELECT desk_number FROM desks WHERE desk_id = $1', [resolvedDeskId]);
+
+    res.status(201).json({
+      id: String(rows[0].reservation_id),
+      confirmationCode: rows[0].confirmation_code,
+      deskNumber: deskRow.rows[0].desk_number,
+      status: 'approved',
+    });
+  } catch (err) {
+    if (err.constraint === 'no_double_booking') {
+      return res.status(409).json({
+        message: 'That desk is already reserved for part of this time range.',
+      });
+    }
+    next(err);
+  }
+});
 
 // PATCH /api/requests/one-off/:id   { decision }
 router.patch('/one-off/:id', async (req, res, next) => {

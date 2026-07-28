@@ -80,6 +80,36 @@ router.get('/code/:code', async (req, res, next) => {
   }
 });
 
+// PATCH /api/reservations/code/:code/cancel
+//
+// The confirmation code is the credential, as with an airline booking
+// reference. Codes are random 8-character strings, so they aren't guessable.
+router.patch('/code/:code/cancel', async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      `UPDATE reservations
+          SET status = 'canceled', expires_at = NULL
+        WHERE confirmation_code = $1
+          AND status IN ('pending', 'approved')
+          AND ends_at > now()
+        RETURNING reservation_id`,
+      [req.params.code.trim().toUpperCase()]
+    );
+
+    if (rows.length === 0) {
+      // Either no such code, already decided, or the booking has finished.
+      // Reported together so the endpoint can't confirm a code exists.
+      return res.status(409).json({
+        message: 'That reservation can no longer be canceled. It may already be canceled, or it has ended.',
+      });
+    }
+
+    res.json({ status: 'canceled' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/reservations
 router.post('/', async (req, res, next) => {
   try {
