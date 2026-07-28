@@ -1,8 +1,12 @@
 const express = require('express');
 const { pool, query } = require('../db');
 const { expirePending } = require('../lib/expirePending');
+const { requireAdmin } = require('../lib/auth');
 
 const router = express.Router();
+
+// The whole approval queue is administrative — nothing here is public.
+router.use(requireAdmin);
 
 const DAY_LABELS = { 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday' };
 
@@ -91,28 +95,19 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// Resolves the acting admin from the email the dashboard sends. Not
-// authentication — there is no session yet, and anyone can reach the dashboard
-// directly. It attributes the decision correctly when an admin did sign in, and
-// records null otherwise rather than inventing an actor.
-async function resolveDecider(email) {
-  if (!email) return null;
-  const { rows } = await query(
-    'SELECT user_id FROM users WHERE lower(email) = lower($1) AND is_active',
-    [email.trim()]
-  );
-  return rows.length > 0 ? rows[0].user_id : null;
-}
+// The acting admin comes from the verified token. A client-supplied email is
+// not trusted for attribution — anyone could claim to be anyone.
+const resolveDecider = (req) => req.user?.sub ?? null;
 
-// PATCH /api/requests/one-off/:id   { decision, decidedByEmail }
+// PATCH /api/requests/one-off/:id   { decision }
 router.patch('/one-off/:id', async (req, res, next) => {
   try {
-    const { decision, decidedByEmail } = req.body;
+    const { decision } = req.body;
     if (!['approved', 'denied'].includes(decision)) {
       return res.status(400).json({ message: "decision must be 'approved' or 'denied'" });
     }
 
-    const deciderId = await resolveDecider(decidedByEmail);
+    const deciderId = resolveDecider(req);
 
     const { rows } = await query(
       `UPDATE reservations
@@ -139,12 +134,12 @@ router.patch('/one-off/:id', async (req, res, next) => {
 router.patch('/recurring/:id', async (req, res, next) => {
   const client = await pool.connect();
   try {
-    const { decision, decidedByEmail } = req.body;
+    const { decision } = req.body;
     if (!['approved', 'denied'].includes(decision)) {
       return res.status(400).json({ message: "decision must be 'approved' or 'denied'" });
     }
 
-    const deciderId = await resolveDecider(decidedByEmail);
+    const deciderId = resolveDecider(req);
 
     await client.query('BEGIN');
 

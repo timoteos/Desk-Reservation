@@ -9,13 +9,18 @@ const desksRouter = require('./routes/desks');
 const reservationsRouter = require('./routes/reservations');
 const recurringSchedulesRouter = require('./routes/recurringSchedules');
 const requestsRouter = require('./routes/requests');
+const authRouter = require('./routes/auth');
+const { readToken } = require('./lib/auth');
 
 const app = express();
 const PORT = process.env.SERVER_PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+// Populates req.user when a valid token is present; routes decide if they need one.
+app.use(readToken);
 
+app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/desks', desksRouter);
 app.use('/api/reservations', reservationsRouter);

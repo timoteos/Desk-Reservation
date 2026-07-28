@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, Mail, Eye, EyeOff } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
+import { login, storeSession } from '../api/client';
 
 const CRUMBS = [
   { label: 'Landing', path: '/' },
@@ -13,14 +14,30 @@ export default function AdminLoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // No real authentication yet — the password isn't checked and the dashboard
-    // is reachable directly. Remembering the email lets approvals be attributed
-    // to whoever signed in, which is the useful half until sessions exist.
-    localStorage.setItem('mqd.adminEmail', email.trim());
-    navigate('/admin/dashboard');
+    if (submitting) return;
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const { token, user } = await login(email.trim(), password);
+      if (user.role !== 'admin') {
+        setError('That account is not an administrator.');
+        return;
+      }
+      storeSession(token);
+      localStorage.setItem('mqd.admin', JSON.stringify(user));
+      navigate('/admin/dashboard');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -81,12 +98,18 @@ export default function AdminLoginPage() {
               </div>
             </div>
 
+            {error && (
+              <p className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+                {error}
+              </p>
+            )}
+
             <button
               type="submit"
-              disabled={!email || !password}
+              disabled={!email || !password || submitting}
               className="w-full bg-mqd-btn hover:bg-mqd-btn-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-4 rounded-lg text-base transition"
             >
-              Log In
+              {submitting ? 'Signing in…' : 'Log In'}
             </button>
           </form>
 

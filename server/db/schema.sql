@@ -25,13 +25,17 @@ CREATE TABLE roles (
 );
 
 CREATE TABLE users (
-  user_id     SERIAL PRIMARY KEY,
-  first_name  TEXT NOT NULL,
-  last_name   TEXT NOT NULL,
-  email       TEXT NOT NULL UNIQUE,
-  role_id     INTEGER NOT NULL REFERENCES roles(role_id),
-  is_active   BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  user_id       SERIAL PRIMARY KEY,
+  first_name    TEXT NOT NULL,
+  last_name     TEXT NOT NULL,
+  email         TEXT NOT NULL UNIQUE,
+  role_id       INTEGER NOT NULL REFERENCES roles(role_id),
+  -- Null for anyone who cannot sign in. Once DHS SSO exists, staff will
+  -- authenticate there and keep a null hash; guests are external to DHS and
+  -- will always need local credentials, so this column outlives SSO.
+  password_hash TEXT,
+  is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE desks (

@@ -12,11 +12,24 @@ class ApiError extends Error {
   }
 }
 
+const TOKEN_KEY = 'mqd.token';
+
+export const getStoredToken = () => localStorage.getItem(TOKEN_KEY);
+export const storeSession = (token) => localStorage.setItem(TOKEN_KEY, token);
+export const clearSession = () => {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem('mqd.admin');
+};
+
 async function request(path, options = {}) {
+  const token = getStoredToken();
   let response;
   try {
     response = await fetch(`${BASE_URL}${path}`, {
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       ...options,
     });
   } catch {
@@ -52,17 +65,21 @@ export const createRecurringSchedule = (payload) =>
 
 export const getDesks = () => request('/api/desks');
 
+export const login = (email, password) =>
+  request('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+
+export const getCurrentAdmin = () => request('/api/auth/me');
+
 export const getRequests = () => request('/api/requests');
 
 export const decideRequest = (kind, id, decision) =>
   request(`/api/requests/${kind === 'recurring' ? 'recurring' : 'one-off'}/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify({
-      decision,
-      // Whoever signed in at the admin page. Absent if they navigated straight
-      // to the dashboard, in which case the decision records no actor.
-      decidedByEmail: localStorage.getItem('mqd.adminEmail') || undefined,
-    }),
+    // The backend takes the acting admin from the verified token.
+    body: JSON.stringify({ decision }),
   });
 
 export const getUsers = () => request('/api/users');
