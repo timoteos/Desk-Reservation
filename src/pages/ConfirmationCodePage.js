@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Ticket, CheckCircle2, XCircle } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
-import { getReservationByCode, ApiError } from '../api/client';
+import { getReservationByCode, cancelReservation, ApiError } from '../api/client';
 
 const CRUMBS = [
   { label: 'Landing', path: '/' },
@@ -47,6 +47,9 @@ export default function ConfirmationCodePage() {
   const [booking, setBooking] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
   const [searching, setSearching] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [canceling, setCanceling] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
 
   const handleConfirm = async (e) => {
     e.preventDefault();
@@ -54,6 +57,8 @@ export default function ConfirmationCodePage() {
 
     setSearching(true);
     setErrorMessage(null);
+    setConfirmingCancel(false);
+    setCancelError(null);
 
     try {
       const found = await getReservationByCode(code.trim());
@@ -73,11 +78,30 @@ export default function ConfirmationCodePage() {
     }
   };
 
+  const handleCancelReservation = async () => {
+    if (canceling) return;
+    setCanceling(true);
+    setCancelError(null);
+    try {
+      await cancelReservation(booking.confirmationCode);
+      // Re-read rather than patching locally, so the shown status comes from
+      // the server and can't drift from what actually happened.
+      setBooking(await getReservationByCode(booking.confirmationCode));
+      setConfirmingCancel(false);
+    } catch (err) {
+      setCancelError(err.message);
+    } finally {
+      setCanceling(false);
+    }
+  };
+
   const handleCancel = () => {
     setCode('');
     setResult(null);
     setBooking(null);
     setErrorMessage(null);
+    setConfirmingCancel(false);
+    setCancelError(null);
   };
 
   return (
@@ -147,6 +171,48 @@ export default function ConfirmationCodePage() {
                   </span>
                 </p>
               </div>
+
+              {/* Cancelling is the only way a desk gets released when someone
+                  decides to work from home instead. */}
+              {['pending', 'approved'].includes(booking.status) && (
+                <div className="w-full mt-3">
+                  {cancelError && (
+                    <p className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm mb-3">
+                      {cancelError}
+                    </p>
+                  )}
+                  {confirmingCancel ? (
+                    <div className="border border-gray-200 rounded-lg p-4 flex flex-col gap-3">
+                      <p className="text-gray-700 text-sm">
+                        Cancel this reservation and release the desk? This can't be undone.
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleCancelReservation}
+                          disabled={canceling}
+                          className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white text-sm font-semibold py-2.5 rounded-lg transition"
+                        >
+                          {canceling ? 'Cancelling…' : 'Yes, cancel it'}
+                        </button>
+                        <button
+                          onClick={() => setConfirmingCancel(false)}
+                          disabled={canceling}
+                          className="flex-1 border border-gray-300 hover:bg-gray-50 disabled:opacity-40 text-gray-700 text-sm font-semibold py-2.5 rounded-lg transition"
+                        >
+                          Keep it
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { setConfirmingCancel(true); setCancelError(null); }}
+                      className="w-full border border-red-300 text-red-700 hover:bg-red-50 text-sm font-semibold py-2.5 rounded-lg transition"
+                    >
+                      Cancel this reservation
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

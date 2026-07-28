@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { Lock, Mail, Eye, EyeOff } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 import { login } from '../api/client';
@@ -12,12 +12,19 @@ const CRUMBS = [
 
 export default function AdminLoginPage() {
   const navigate = useNavigate();
-  const { signIn } = useAuth();
+  const { admin, signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+
+  // Already signed in — a login form here would be a dead end, since the page
+  // offers no other way onward. Declared after the hooks so the hook order
+  // stays constant across renders.
+  if (admin) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();

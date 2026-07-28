@@ -73,6 +73,12 @@ export const login = (email, password) =>
 
 export const getCurrentAdmin = () => request('/api/auth/me');
 
+export const cancelReservation = (code) =>
+  request(`/api/reservations/code/${encodeURIComponent(code)}/cancel`, { method: 'PATCH' });
+
+export const adminBook = (payload) =>
+  request('/api/requests/book', { method: 'POST', body: JSON.stringify(payload) });
+
 export const getRequests = () => request('/api/requests');
 
 export const decideRequest = (kind, id, decision) =>

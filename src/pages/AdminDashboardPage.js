@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, X, Check, LayoutGrid, ScrollText, Inbox, CalendarClock } from 'lucide-react';
+import { Plus, X, Check, LayoutGrid, ScrollText, Inbox, CalendarClock, CalendarPlus } from 'lucide-react';
+import AdminBookingModal from '../components/AdminBookingModal';
 import {
   getUsers,
   getUserReservations,
@@ -344,6 +345,7 @@ export default function AdminDashboardPage() {
   const [requestsLoading, setRequestsLoading] = useState(true);
   const [requestsError, setRequestsError] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [booking, setBooking] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -386,7 +388,7 @@ export default function AdminDashboardPage() {
     <div className="flex-1 flex flex-col items-center px-4 md:px-8 py-8 bg-white">
       <div className="w-full max-w-2xl">
         {/* Tabs */}
-        <div className="flex gap-2 mb-4">
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = tab.key === activeTab;
@@ -409,6 +411,14 @@ export default function AdminDashboardPage() {
               </button>
             );
           })}
+
+          <button
+            onClick={() => setBooking(true)}
+            className="ml-auto flex items-center gap-1.5 bg-mqd-btn hover:bg-mqd-btn-hover text-white text-sm font-semibold px-4 py-2 rounded-lg transition"
+          >
+            <CalendarPlus className="w-4 h-4" />
+            Book a desk
+          </button>
         </div>
 
         {activeTab === 'main' && (
@@ -433,6 +443,14 @@ export default function AdminDashboardPage() {
       </div>
 
       <UserDetailModal user={selectedUser} onClose={() => setSelectedUser(null)} />
+
+      {booking && (
+        <AdminBookingModal
+          users={users}
+          onClose={() => setBooking(false)}
+          onBooked={loadRequests}
+        />
+      )}
     </div>
   );
 }
