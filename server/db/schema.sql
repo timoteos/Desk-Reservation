@@ -57,6 +57,8 @@ CREATE TABLE recurring_schedules (
   -- Set when the request is created. 'expired' is distinct from 'denied':
   -- one means nobody reviewed it in time, the other means someone said no.
   expires_at    TIMESTAMPTZ,
+  decided_by_user_id INTEGER REFERENCES users(user_id),
+  decided_at    TIMESTAMPTZ,
   active_from   DATE NOT NULL DEFAULT current_date,
   active_until  DATE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -76,6 +78,11 @@ CREATE TABLE reservations (
   -- LEAST(created_at + 24h, starts_at - 2h). The second bound matters more:
   -- a request for tomorrow morning must not sit pending past the reservation.
   expires_at         TIMESTAMPTZ,
+  -- Who approved or denied, and when. Null means no one decided it: seeded
+  -- fixtures, or a request that lapsed. The logs table will eventually carry
+  -- the full audit trail; this covers "who approved my desk?" directly.
+  decided_by_user_id INTEGER REFERENCES users(user_id),
+  decided_at         TIMESTAMPTZ,
   confirmation_code  TEXT NOT NULL UNIQUE,
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
 

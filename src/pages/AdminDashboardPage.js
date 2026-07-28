@@ -66,7 +66,10 @@ function UserDetailModal({ user, onClose }) {
         </button>
 
         <h2 className="text-mqd-title text-xl font-bold mb-1">{user.name}</h2>
-        <p className="text-gray-500 text-sm mb-5">Upcoming confirmed reservations</p>
+        <p className="text-gray-500 text-sm mb-5">
+          Upcoming approved reservations. Requests awaiting a decision appear
+          under Requests, not here.
+        </p>
 
         {loading ? (
           <p className="text-gray-400 text-sm text-center py-8">Loading reservations…</p>
@@ -82,6 +85,11 @@ function UserDetailModal({ user, onClose }) {
                 <p className="font-semibold text-gray-800">{formatDate(r.date)}</p>
                 <p className="text-gray-500">
                   Desk# {r.deskNumber} &middot; {formatMinutes(r.startMin)} - {formatMinutes(r.endMin)}
+                </p>
+                <p className="text-gray-400 text-xs mt-1.5 flex items-center gap-1">
+                  <Check className="w-3 h-3 shrink-0" />
+                  {r.approvedBy ? `Approved by ${r.approvedBy}` : 'Approved'}
+                  {r.approvedAt && ` · ${formatDate(r.approvedAt.split('T')[0])}`}
                 </p>
               </div>
             ))}

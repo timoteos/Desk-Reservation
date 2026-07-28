@@ -91,20 +91,36 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// PATCH /api/requests/one-off/:id   { decision: 'approved' | 'denied' }
+// Resolves the acting admin from the email the dashboard sends. Not
+// authentication — there is no session yet, and anyone can reach the dashboard
+// directly. It attributes the decision correctly when an admin did sign in, and
+// records null otherwise rather than inventing an actor.
+async function resolveDecider(email) {
+  if (!email) return null;
+  const { rows } = await query(
+    'SELECT user_id FROM users WHERE lower(email) = lower($1) AND is_active',
+    [email.trim()]
+  );
+  return rows.length > 0 ? rows[0].user_id : null;
+}
+
+// PATCH /api/requests/one-off/:id   { decision, decidedByEmail }
 router.patch('/one-off/:id', async (req, res, next) => {
   try {
-    const { decision } = req.body;
+    const { decision, decidedByEmail } = req.body;
     if (!['approved', 'denied'].includes(decision)) {
       return res.status(400).json({ message: "decision must be 'approved' or 'denied'" });
     }
 
+    const deciderId = await resolveDecider(decidedByEmail);
+
     const { rows } = await query(
       `UPDATE reservations
-          SET status = $1, expires_at = NULL
+          SET status = $1, expires_at = NULL,
+              decided_by_user_id = $3, decided_at = now()
         WHERE reservation_id = $2 AND status = 'pending'
         RETURNING reservation_id`,
-      [decision, req.params.id]
+      [decision, req.params.id, deciderId]
     );
 
     if (rows.length === 0) {
@@ -123,10 +139,12 @@ router.patch('/one-off/:id', async (req, res, next) => {
 router.patch('/recurring/:id', async (req, res, next) => {
   const client = await pool.connect();
   try {
-    const { decision } = req.body;
+    const { decision, decidedByEmail } = req.body;
     if (!['approved', 'denied'].includes(decision)) {
       return res.status(400).json({ message: "decision must be 'approved' or 'denied'" });
     }
+
+    const deciderId = await resolveDecider(decidedByEmail);
 
     await client.query('BEGIN');
 
@@ -153,15 +171,19 @@ router.patch('/recurring/:id', async (req, res, next) => {
     const ids = group.map((r) => r.schedule_id);
 
     await client.query(
-      `UPDATE recurring_schedules SET status = $1, expires_at = NULL
+      `UPDATE recurring_schedules
+          SET status = $1, expires_at = NULL,
+              decided_by_user_id = $3, decided_at = now()
         WHERE schedule_id = ANY($2::int[])`,
-      [decision, ids]
+      [decision, ids, deciderId]
     );
 
     const { rowCount } = await client.query(
-      `UPDATE reservations SET status = $1, expires_at = NULL
+      `UPDATE reservations
+          SET status = $1, expires_at = NULL,
+              decided_by_user_id = $3, decided_at = now()
         WHERE schedule_id = ANY($2::int[]) AND status = 'pending'`,
-      [decision, ids]
+      [decision, ids, deciderId]
     );
 
     await client.query('COMMIT');

@@ -57,7 +57,12 @@ export const getRequests = () => request('/api/requests');
 export const decideRequest = (kind, id, decision) =>
   request(`/api/requests/${kind === 'recurring' ? 'recurring' : 'one-off'}/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ decision }),
+    body: JSON.stringify({
+      decision,
+      // Whoever signed in at the admin page. Absent if they navigated straight
+      // to the dashboard, in which case the decision records no actor.
+      decidedByEmail: localStorage.getItem('mqd.adminEmail') || undefined,
+    }),
   });
 
 export const getUsers = () => request('/api/users');
