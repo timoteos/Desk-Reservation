@@ -3,12 +3,14 @@ import { useSearchParams } from 'react-router-dom';
 import { Mail, CheckCircle2 } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 import { createReservation } from '../api/client';
+import BackLink from '../components/BackLink';
 
 // Desk Selection is omitted when the desk was assigned automatically, since
 // the user never passed through that step.
 const crumbsFor = (autoAssign) => [
   { label: 'Landing', path: '/' },
   { label: 'Reservation', path: '/reservation' },
+  { label: 'Calendar', path: '/calendar' },
   ...(autoAssign ? [] : [{ label: 'Desk Selection', path: '/desk-selection' }]),
   { label: 'User Confirmation', path: '/request' },
 ];
@@ -73,6 +75,20 @@ export default function UserConfirmationPage() {
   return (
     <>
       <Breadcrumb crumbs={crumbsFor(autoAssign)} />
+
+      {/* Once booked there is nothing to go back to — the reservation exists.
+          Auto-assigned bookings skipped desk selection, so they return to the
+          calendar instead. */}
+      {!confirmation && (
+        <div className="px-4 md:px-8 bg-gray-50 pt-2">
+          <BackLink
+            to={autoAssign
+              ? `/calendar?startDate=${dateStr}&duration=${endMin - startMin}&type=hourly&deskChoice=auto`
+              : `/desk-selection?date=${dateStr}&startMin=${startMin}&endMin=${endMin}&type=hourly`}
+            label={autoAssign ? 'Back to date and time' : 'Back to desk selection'}
+          />
+        </div>
+      )}
 
       <div className="flex-1 flex flex-col items-center justify-center px-8 py-12 bg-gray-50">
         <div className="w-full max-w-lg flex flex-col gap-6 bg-white rounded-xl shadow-md border border-gray-100 p-8 opacity-0 animate-fade-up">

@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
+import BackLink from '../components/BackLink';
 import { getDesks, getReservationsForDate } from '../api/client';
 
 const CRUMBS = [
   { label: 'Landing', path: '/' },
   { label: 'Reservation', path: '/reservation' },
+  { label: 'Calendar', path: '/calendar' },
   { label: 'Desk Selection', path: '/desk-selection' },
 ];
 
@@ -105,6 +107,16 @@ export default function DeskSelectionPage() {
       <Breadcrumb crumbs={CRUMBS} />
 
       <div className="flex-1 flex flex-col items-center px-8 py-6 gap-4 bg-gray-50">
+        {/* Duration is derivable, and reaching this page means a desk was being
+            chosen — so the calendar can be restored exactly. */}
+        <div className="w-full max-w-5xl">
+          <BackLink
+            to={`/calendar?startDate=${dateStr}&duration=${endMin - startMin}`
+              + `&type=${searchParams.get('type') || 'hourly'}&deskChoice=pick`}
+            label="Back to date and time"
+          />
+        </div>
+
         {/* Date / time header */}
         <div className="flex items-center justify-between w-full max-w-5xl bg-white rounded-xl shadow-md border border-gray-100 px-6 py-4 opacity-0 animate-fade-up">
           <h2 className="text-lg font-semibold text-mqd-title">{dateLabel}</h2>

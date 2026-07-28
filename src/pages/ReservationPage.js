@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, RotateCcw, Clock, CalendarDays, LayoutGrid, Shuffle } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
@@ -13,10 +13,22 @@ const MINS_IN_WORKDAY = 510; // 8:00 AM to 4:30 PM
 
 export default function ReservationPage() {
   const navigate = useNavigate();
-  const [type, setType] = useState('hourly');
-  const [count, setCount] = useState(1);
-  const [noEarlierThan, setNoEarlierThan] = useState('');
-  const [deskChoice, setDeskChoice] = useState('pick'); // 'pick' | 'auto'
+  const [searchParams] = useSearchParams();
+
+  // Restored when arriving back from the calendar, so stepping backwards
+  // doesn't discard what was already chosen.
+  const initialType = searchParams.get('type') === 'full' ? 'full' : 'hourly';
+  const initialDuration = parseInt(searchParams.get('duration') || '', 10);
+  const initialCount = Number.isNaN(initialDuration)
+    ? 1
+    : Math.max(1, Math.round(initialDuration / (initialType === 'full' ? MINS_IN_WORKDAY : 60)));
+
+  const [type, setType] = useState(initialType);
+  const [count, setCount] = useState(initialCount);
+  const [noEarlierThan, setNoEarlierThan] = useState(searchParams.get('startDate') || '');
+  const [deskChoice, setDeskChoice] = useState(
+    searchParams.get('deskChoice') === 'auto' ? 'auto' : 'pick'
+  );
 
   const decrement = () => setCount((prev) => Math.max(1, prev - 1));
   const increment = () => {
