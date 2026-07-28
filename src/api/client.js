@@ -44,6 +44,12 @@ export const createReservation = (payload) =>
     body: JSON.stringify(payload),
   });
 
+export const createRecurringSchedule = (payload) =>
+  request('/api/recurring-schedules', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
 export const getDesks = () => request('/api/desks');
 
 export const getUsers = () => request('/api/users');

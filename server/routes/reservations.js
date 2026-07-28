@@ -61,9 +61,10 @@ router.post('/', async (req, res, next) => {
   try {
     const { userId, email, deskId, date, startMin, endMin } = req.body;
 
-    if ((!userId && !email) || !deskId || !date || startMin == null || endMin == null) {
+    // deskId is optional — omitting it asks the system to assign one.
+    if ((!userId && !email) || !date || startMin == null || endMin == null) {
       return res.status(400).json({
-        message: 'deskId, date, startMin, endMin and either userId or email are required',
+        message: 'date, startMin, endMin and either userId or email are required',
       });
     }
 
@@ -84,12 +85,38 @@ router.post('/', async (req, res, next) => {
 
     const { startsAt, endsAt } = toTimestamps(date, startMin, endMin);
 
+    // No desk chosen: pick one at random from those free for this window.
+    // Random rather than lowest-numbered so bookings spread across the office
+    // instead of piling onto Desk# 1.
+    let resolvedDeskId = deskId;
+    if (!resolvedDeskId) {
+      const { rows } = await query(
+        `SELECT desk_id FROM desks d
+          WHERE d.is_active
+            AND NOT EXISTS (
+              SELECT 1 FROM reservations r
+               WHERE r.desk_id = d.desk_id
+                 AND r.status IN ('pending', 'approved')
+                 AND tsrange(r.starts_at, r.ends_at) && tsrange($1, $2)
+            )
+          ORDER BY random()
+          LIMIT 1`,
+        [startsAt, endsAt]
+      );
+      if (rows.length === 0) {
+        return res.status(409).json({
+          message: 'Every desk is booked for that time. Try a different slot.',
+        });
+      }
+      resolvedDeskId = rows[0].desk_id;
+    }
+
     const inserted = await query(
       `INSERT INTO reservations
          (user_id, desk_id, starts_at, ends_at, confirmation_code)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING reservation_id`,
-      [resolvedUserId, deskId, startsAt, endsAt, generateConfirmationCode()]
+      [resolvedUserId, resolvedDeskId, startsAt, endsAt, generateConfirmationCode()]
     );
 
     const result = await query(

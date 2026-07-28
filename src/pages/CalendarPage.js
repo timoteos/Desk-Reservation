@@ -237,8 +237,13 @@ export default function CalendarPage() {
             disabled={!selectedSlot}
             onClick={() => {
               if (!selectedSlot) return;
+              const slot = `date=${dateStr}&startMin=${selectedSlot.startMin}&endMin=${selectedSlot.endMin}`;
+              // Asking for any free desk skips the floor plan entirely — the
+              // backend assigns one when the booking is submitted.
               navigate(
-                `/desk-selection?date=${dateStr}&startMin=${selectedSlot.startMin}&endMin=${selectedSlot.endMin}&type=${searchParams.get('type') || 'hourly'}`
+                searchParams.get('deskChoice') === 'auto'
+                  ? `/request?${slot}&deskChoice=auto`
+                  : `/desk-selection?${slot}&type=${searchParams.get('type') || 'hourly'}`
               );
             }}
             className="w-full bg-mqd-btn hover:bg-mqd-btn-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2 rounded transition mt-auto flex items-center justify-center gap-2"

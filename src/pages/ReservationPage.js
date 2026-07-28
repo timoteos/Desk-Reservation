@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, RotateCcw, Clock, CalendarDays } from 'lucide-react';
+import { ArrowRight, RotateCcw, Clock, CalendarDays, LayoutGrid, Shuffle } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 
 const CRUMBS = [
@@ -16,6 +16,7 @@ export default function ReservationPage() {
   const [type, setType] = useState('hourly');
   const [count, setCount] = useState(1);
   const [noEarlierThan, setNoEarlierThan] = useState('');
+  const [deskChoice, setDeskChoice] = useState('pick'); // 'pick' | 'auto'
 
   const decrement = () => setCount((prev) => Math.max(1, prev - 1));
   const increment = () => {
@@ -26,7 +27,9 @@ export default function ReservationPage() {
   const handleSeeAvailability = () => {
     const startDate = noEarlierThan || today;
     const durationMins = type === 'hourly' ? count * 60 : MINS_IN_WORKDAY * count;
-    navigate(`/calendar?startDate=${startDate}&duration=${durationMins}&type=${type}`);
+    navigate(
+      `/calendar?startDate=${startDate}&duration=${durationMins}&type=${type}&deskChoice=${deskChoice}`
+    );
   };
 
   return (
@@ -101,6 +104,34 @@ export default function ReservationPage() {
               onChange={(e) => setNoEarlierThan(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
             />
+          </div>
+
+          {/* Desk choice */}
+          <div>
+            <p className="text-gray-700 font-medium mb-2">Desk</p>
+            <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+              <button
+                onClick={() => setDeskChoice('pick')}
+                className={`flex-1 py-3 text-sm font-semibold transition flex items-center justify-center gap-2
+                  ${deskChoice === 'pick' ? 'bg-mqd-btn text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+              >
+                <LayoutGrid className="w-4 h-4" />
+                I'll choose
+              </button>
+              <button
+                onClick={() => setDeskChoice('auto')}
+                className={`flex-1 py-3 text-sm font-semibold transition border-l border-gray-300 flex items-center justify-center gap-2
+                  ${deskChoice === 'auto' ? 'bg-mqd-btn text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+              >
+                <Shuffle className="w-4 h-4" />
+                Assign me one
+              </button>
+            </div>
+            <p className="text-gray-400 text-xs mt-2">
+              {deskChoice === 'pick'
+                ? 'Pick your desk from the office floor plan.'
+                : 'Skip the floor plan — any free desk is assigned for you.'}
+            </p>
           </div>
 
           {/* See availability */}

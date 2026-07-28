@@ -4,10 +4,12 @@ import { Mail, CheckCircle2 } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 import { createReservation } from '../api/client';
 
-const CRUMBS = [
+// Desk Selection is omitted when the desk was assigned automatically, since
+// the user never passed through that step.
+const crumbsFor = (autoAssign) => [
   { label: 'Landing', path: '/' },
   { label: 'Reservation', path: '/reservation' },
-  { label: 'Desk Selection', path: '/desk-selection' },
+  ...(autoAssign ? [] : [{ label: 'Desk Selection', path: '/desk-selection' }]),
   { label: 'User Confirmation', path: '/request' },
 ];
 
@@ -36,6 +38,7 @@ export default function UserConfirmationPage() {
 
   const deskId = searchParams.get('deskId');
   const deskNumber = searchParams.get('deskNumber');
+  const autoAssign = searchParams.get('deskChoice') === 'auto';
   const dateStr = searchParams.get('date') || '';
   const startMin = parseInt(searchParams.get('startMin') || '480', 10);
   const endMin = parseInt(searchParams.get('endMin') || '540', 10);
@@ -53,7 +56,8 @@ export default function UserConfirmationPage() {
     try {
       const reservation = await createReservation({
         email: email.trim(),
-        deskId: Number(deskId),
+        // Omitting deskId asks the backend to assign any free desk.
+        ...(autoAssign ? {} : { deskId: Number(deskId) }),
         date: dateStr,
         startMin,
         endMin,
@@ -68,7 +72,7 @@ export default function UserConfirmationPage() {
 
   return (
     <>
-      <Breadcrumb crumbs={CRUMBS} />
+      <Breadcrumb crumbs={crumbsFor(autoAssign)} />
 
       <div className="flex-1 flex flex-col items-center justify-center px-8 py-12 bg-gray-50">
         <div className="w-full max-w-lg flex flex-col gap-6 bg-white rounded-xl shadow-md border border-gray-100 p-8 opacity-0 animate-fade-up">
@@ -79,7 +83,14 @@ export default function UserConfirmationPage() {
           </div>
 
           <div className="bg-gray-50 border border-gray-100 rounded-lg p-5 text-center text-sm text-gray-700 space-y-1">
-            <p><span className="font-semibold text-mqd-title">Desk:</span> Desk# {deskNumber}</p>
+            <p>
+              <span className="font-semibold text-mqd-title">Desk:</span>{' '}
+              {confirmation
+                ? `Desk# ${confirmation.deskNumber}`
+                : autoAssign
+                  ? 'Assigned automatically'
+                  : `Desk# ${deskNumber}`}
+            </p>
             <p><span className="font-semibold text-mqd-title">Location:</span> MQD System Office</p>
             <p>
               <span className="font-semibold text-mqd-title">Date & Time:</span>{' '}

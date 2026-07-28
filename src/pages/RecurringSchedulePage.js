@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RotateCcw, CheckCircle2 } from 'lucide-react';
+import { RotateCcw, CheckCircle2, Mail } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
+import { createRecurringSchedule } from '../api/client';
 
 const CRUMBS = [
   { label: 'Landing', path: '/' },
@@ -24,7 +25,10 @@ export default function RecurringSchedulePage() {
   const navigate = useNavigate();
   // Map of dayKey -> { start, end } for every day the user has selected
   const [schedule, setSchedule] = useState({});
-  const [submitted, setSubmitted] = useState(false);
+  const [email, setEmail] = useState('');
+  const [result, setResult] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
 
   const toggleDay = (key) => {
     setSchedule((prev) => {
@@ -47,12 +51,35 @@ export default function RecurringSchedulePage() {
 
   const selectedKeys = Object.keys(schedule);
   const allValid = selectedKeys.every((key) => schedule[key].start < schedule[key].end);
-  const canSubmit = selectedKeys.length > 0 && allValid;
+  const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const canSubmit = selectedKeys.length > 0 && allValid && isValidEmail && !submitting;
 
-  const handleSubmit = (e) => {
+  // "08:30" -> 510
+  const toMinutes = (hhmm) => {
+    const [h, m] = hhmm.split(':').map(Number);
+    return h * 60 + m;
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!canSubmit) return;
-    setSubmitted(true);
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const days = Object.fromEntries(
+        selectedKeys.map((key) => [
+          key,
+          { startMin: toMinutes(schedule[key].start), endMin: toMinutes(schedule[key].end) },
+        ])
+      );
+      setResult(await createRecurringSchedule({ email: email.trim(), days }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const selectedDays = DAYS.filter((d) => schedule[d.key]);
@@ -76,10 +103,14 @@ export default function RecurringSchedulePage() {
             </div>
           </div>
 
-          {submitted ? (
+          {result ? (
             <div className="flex flex-col items-center gap-2 text-center py-6">
               <CheckCircle2 className="w-10 h-10 text-mqd-title" />
-              <p className="text-mqd-title font-semibold">Recurring schedule requested</p>
+              <p className="text-mqd-title font-semibold">Recurring schedule created</p>
+              <p className="text-gray-600 text-sm">
+                Desk# {result.deskNumber} &middot; {result.created} booking
+                {result.created === 1 ? '' : 's'} over the next {result.horizonDays} days
+              </p>
               <div className="text-gray-500 text-sm w-full space-y-1 mt-2">
                 {selectedDays.map((d) => (
                   <p key={d.key}>
@@ -88,6 +119,13 @@ export default function RecurringSchedulePage() {
                   </p>
                 ))}
               </div>
+
+              {result.skipped.length > 0 && (
+                <p className="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-4 py-3 text-sm mt-2 w-full">
+                  {result.skipped.length} date{result.skipped.length === 1 ? ' was' : 's were'} skipped
+                  because that desk was already booked at the time.
+                </p>
+              )}
               <button
                 onClick={() => navigate('/reservation')}
                 className="mt-4 text-mqd-btn hover:underline text-sm font-medium"
@@ -160,16 +198,39 @@ export default function RecurringSchedulePage() {
                 </div>
               )}
 
+              <div>
+                <label htmlFor="recurring-email" className="text-gray-700 font-medium mb-2 flex items-center gap-2">
+                  <Mail className="w-4 h-4" />
+                  Email
+                </label>
+                <input
+                  id="recurring-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@dhs.hawaii.gov"
+                  required
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                />
+              </div>
+
               <p className="text-gray-400 text-xs -mt-2">
-                Office hours are 8:00 AM – 4:30 PM, Monday through Friday.
+                Office hours are 8:00 AM – 4:30 PM, Monday through Friday. A desk is
+                assigned automatically and booked for the next 90 days.
               </p>
+
+              {error && (
+                <p className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+                  {error}
+                </p>
+              )}
 
               <button
                 type="submit"
                 disabled={!canSubmit}
                 className="w-full bg-mqd-btn hover:bg-mqd-btn-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-4 rounded-lg text-base transition"
               >
-                Set Up Recurring Schedule
+                {submitting ? 'Creating bookings…' : 'Set Up Recurring Schedule'}
               </button>
             </form>
           )}
