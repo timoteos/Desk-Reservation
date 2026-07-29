@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, RotateCcw, Clock, CalendarDays, LayoutGrid, Shuffle } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
+import { MINS_IN_WORKDAY } from '../lib/officeHours';
 
 const CRUMBS = [
   { label: 'Landing', path: '/' },
@@ -9,7 +10,7 @@ const CRUMBS = [
 ];
 
 const today = new Date().toISOString().split('T')[0];
-const MINS_IN_WORKDAY = 510; // 8:00 AM to 4:30 PM
+
 
 export default function ReservationPage() {
   const navigate = useNavigate();

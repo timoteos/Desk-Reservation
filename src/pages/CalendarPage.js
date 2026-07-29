@@ -4,6 +4,12 @@ import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 import BackLink from '../components/BackLink';
 import { getReservationsForDate, getDesks } from '../api/client';
+import {
+  OFFICE_START as DAY_START,
+  OFFICE_END as DAY_END,
+  SLOT_MINUTES as INCREMENT,
+  formatMinutes,
+} from '../lib/officeHours';
 
 const CRUMBS = [
   { label: 'Landing', path: '/' },
@@ -17,17 +23,6 @@ const MONTHS = [
   'July','August','September','October','November','December',
 ];
 
-const DAY_START = 480;  // 8:00 AM in minutes
-const DAY_END   = 990;  // 4:30 PM in minutes
-const INCREMENT = 30;   // 30-min slots
-
-const formatMinutes = (mins) => {
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  const hour = h > 12 ? h - 12 : h === 0 ? 12 : h;
-  return `${hour}:${m.toString().padStart(2, '0')} ${ampm}`;
-};
 
 // Available start times for a duration, given the day's existing bookings.
 //

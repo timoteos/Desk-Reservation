@@ -4,6 +4,7 @@ const { expirePending } = require('../lib/expirePending');
 const { toTimestamps, generateConfirmationCode } = require('../lib/reservationShape');
 const { requireAdmin } = require('../lib/auth');
 const { recordActivity } = require('../lib/activityLog');
+const { officeHoursError } = require('../lib/officeHours');
 
 const router = express.Router();
 
@@ -131,11 +132,11 @@ router.post('/book', async (req, res, next) => {
       });
     }
 
+    const hoursProblem = officeHoursError(startMin, endMin);
+    if (hoursProblem) return res.status(400).json({ message: hoursProblem });
+
     const { startsAt, endsAt } = toTimestamps(date, startMin, endMin);
 
-    if (endsAt <= startsAt) {
-      return res.status(400).json({ message: 'End time must be after start time.' });
-    }
     if (startsAt <= new Date()) {
       return res.status(400).json({ message: 'That time has already passed. Pick a later slot.' });
     }
@@ -241,10 +242,10 @@ router.patch('/reservations/:id', async (req, res, next) => {
     let startsAt = before.starts_at;
     let endsAt = before.ends_at;
     if (wantsTimeChange) {
+      const hoursProblem = officeHoursError(startMin, endMin);
+      if (hoursProblem) return res.status(400).json({ message: hoursProblem });
+
       ({ startsAt, endsAt } = toTimestamps(date, startMin, endMin));
-      if (endsAt <= startsAt) {
-        return res.status(400).json({ message: 'End time must be after start time.' });
-      }
       if (startsAt <= new Date()) {
         return res.status(400).json({ message: 'That time has already passed. Pick a later slot.' });
       }
