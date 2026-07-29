@@ -166,8 +166,9 @@ router.post('/', async (req, res, next) => {
         await client.query('SAVEPOINT occurrence');
         await client.query(
           `INSERT INTO reservations
-             (user_id, desk_id, schedule_id, starts_at, ends_at, confirmation_code, expires_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+             (user_id, desk_id, schedule_id, starts_at, ends_at, confirmation_code,
+              expires_at, booking_source)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'recurring')`,
           [
             userId,
             best.desk_id,

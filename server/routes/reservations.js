@@ -12,7 +12,7 @@ const router = express.Router();
 
 const SELECT_RESERVATION = `
   SELECT r.reservation_id, r.user_id, r.desk_id, r.starts_at, r.ends_at,
-         r.status, r.confirmation_code,
+         r.status, r.confirmation_code, r.booking_source,
          u.first_name, u.last_name,
          d.desk_number
     FROM reservations r
@@ -50,13 +50,19 @@ router.get('/', async (req, res, next) => {
       // Most recent first: a past booking is usually looked up because someone
       // is asking about it now.
       result = await query(
-        `${SELECT_RESERVATION} WHERE r.ends_at < now() ORDER BY r.starts_at DESC`
+        `${SELECT_RESERVATION}
+           WHERE r.status = 'approved' AND r.ends_at < now()
+           ORDER BY r.starts_at DESC`
       );
     } else if (scope === 'all') {
-      result = await query(`${SELECT_RESERVATION} ORDER BY r.starts_at DESC`);
+      result = await query(
+        `${SELECT_RESERVATION} WHERE r.status = 'approved' ORDER BY r.starts_at DESC`
+      );
     } else {
       result = await query(
-        `${SELECT_RESERVATION} WHERE r.ends_at >= now() ORDER BY r.starts_at`
+        `${SELECT_RESERVATION}
+           WHERE r.status = 'approved' AND r.ends_at >= now()
+           ORDER BY r.starts_at`
       );
     }
 

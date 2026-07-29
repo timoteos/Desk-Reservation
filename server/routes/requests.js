@@ -150,8 +150,8 @@ router.post('/book', async (req, res, next) => {
     const { rows } = await query(
       `INSERT INTO reservations
          (user_id, desk_id, starts_at, ends_at, confirmation_code,
-          status, decided_by_user_id, decided_at)
-       VALUES ($1, $2, $3, $4, $5, 'approved', $6, now())
+          status, decided_by_user_id, decided_at, booking_source)
+       VALUES ($1, $2, $3, $4, $5, 'approved', $6, now(), 'admin')
        RETURNING reservation_id, confirmation_code`,
       [userId, resolvedDeskId, startsAt, endsAt, generateConfirmationCode(), resolveDecider(req)]
     );
