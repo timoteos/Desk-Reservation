@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Plus, X, Check, CalendarDays, Users, ScrollText, Inbox, CalendarClock, CalendarPlus } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Plus, X, Check, CalendarDays, Users, ScrollText, Inbox, CalendarClock, CalendarPlus, Copy } from 'lucide-react';
 import AdminBookingModal from '../components/AdminBookingModal';
 import ReservationsTab from '../components/ReservationsTab';
 import {
@@ -31,6 +31,40 @@ const formatDate = (dateStr) => {
   const d = new Date(dateStr + 'T00:00:00');
   return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 };
+
+function CopyableCode({ code }) {
+  const [copied, setCopied] = useState(false);
+  const codeRef = useRef(null);
+
+  // Browsers refuse clipboard access in plenty of situations — no user
+  // gesture, insecure context, permission denied. Falling back to selecting
+  // the text means the click still achieves something rather than appearing
+  // to do nothing.
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      const range = document.createRange();
+      range.selectNodeContents(codeRef.current);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+  };
+
+  return (
+    <button
+      onClick={copy}
+      title="Copy confirmation code"
+      className="mt-2 inline-flex items-center gap-1.5 font-mono text-xs tracking-wider text-mqd-title bg-mqd-btn/10 hover:bg-mqd-btn/20 rounded px-2 py-1 transition"
+    >
+      <span ref={codeRef} className="select-all">{code}</span>
+      {copied ? <Check className="w-3 h-3 shrink-0" /> : <Copy className="w-3 h-3 shrink-0 opacity-60" />}
+    </button>
+  );
+}
 
 function UserDetailModal({ user, onClose }) {
   const [reservations, setReservations] = useState([]);
@@ -89,6 +123,11 @@ function UserDetailModal({ user, onClose }) {
                 <p className="text-gray-500">
                   Desk# {r.deskNumber} &middot; {formatMinutes(r.startMin)} - {formatMinutes(r.endMin)}
                 </p>
+                {/* Shown so an admin can give someone their code back when
+                    they've lost it. Copyable because it usually gets pasted
+                    into an email or chat rather than read aloud. */}
+                <CopyableCode code={r.confirmationCode} />
+
                 <p className="text-gray-400 text-xs mt-1.5 flex items-center gap-1">
                   <Check className="w-3 h-3 shrink-0" />
                   {r.approvedBy ? `Approved by ${r.approvedBy}` : 'Approved'}
