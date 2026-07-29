@@ -20,7 +20,7 @@ const SOURCE_LABELS = {
 };
 
 const SOURCE_STYLES = {
-  user: 'bg-slate-100 text-slate-700',
+  user: 'bg-surface-panel text-ink-body',
   admin: 'bg-sky-100 text-sky-800',
   recurring: 'bg-indigo-100 text-indigo-800',
 };

@@ -145,7 +145,7 @@ function UserDetailModal({ user, onClose }) {
 const ROLE_STYLES = {
   admin: 'bg-sky-100 text-sky-800',
   guest: 'bg-amber-100 text-amber-800',
-  member: 'bg-slate-100 text-slate-700',
+  member: 'bg-surface-panel text-ink-body',
 };
 
 function MainTab({ users, selectedUserId, onSelectUser }) {
