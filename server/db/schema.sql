@@ -12,6 +12,8 @@ BEGIN;
 -- integer column sit alongside a range overlap check in the same GiST index.
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
+DROP TABLE IF EXISTS logs CASCADE;
+DROP TABLE IF EXISTS activities CASCADE;
 DROP TABLE IF EXISTS reservations CASCADE;
 DROP TABLE IF EXISTS recurring_schedules CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
@@ -100,6 +102,36 @@ CREATE TABLE reservations (
     tsrange(starts_at, ends_at) WITH &&
   ) WHERE (status IN ('pending', 'approved'))
 );
+
+-- What kinds of thing can happen. A lookup table rather than free text so
+-- "show me every denial this month" is a join, not a string match.
+CREATE TABLE activities (
+  activity_id    SERIAL PRIMARY KEY,
+  activity_type  TEXT NOT NULL UNIQUE,
+  label          TEXT NOT NULL
+);
+
+-- The audit trail: who did what, to which booking, and when.
+CREATE TABLE logs (
+  log_id          SERIAL PRIMARY KEY,
+  activity_id     INTEGER NOT NULL REFERENCES activities(activity_id),
+  -- ON DELETE SET NULL rather than CASCADE: losing history when a booking is
+  -- removed would defeat the point of keeping a trail.
+  reservation_id  INTEGER REFERENCES reservations(reservation_id) ON DELETE SET NULL,
+  schedule_id     INTEGER REFERENCES recurring_schedules(schedule_id) ON DELETE SET NULL,
+  -- Null means the system acted, not that the actor is unknown — the expiry
+  -- sweep has no person behind it.
+  actor_user_id   INTEGER REFERENCES users(user_id),
+  -- Structured before/after for changes, so an extension records what moved
+  -- rather than only that something did.
+  metadata        JSONB,
+  description     TEXT,
+  occurred_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- The log is read newest-first and occasionally filtered by kind.
+CREATE INDEX logs_occurred_idx ON logs (occurred_at DESC);
+CREATE INDEX logs_activity_idx ON logs (activity_id);
 
 -- Availability lookups filter by day and desk; this covers the common path.
 CREATE INDEX reservations_desk_time_idx

@@ -2,6 +2,7 @@ const express = require('express');
 const { pool, query } = require('../db');
 const { generateConfirmationCode, toDateString } = require('../lib/reservationShape');
 const { expiryFor } = require('../lib/expirePending');
+const { recordActivity } = require('../lib/activityLog');
 
 const router = express.Router();
 
@@ -188,6 +189,16 @@ router.post('/', async (req, res, next) => {
         }
       }
     }
+
+    // One entry for the request, not one per generated booking — 39 rows would
+    // bury everything else in the trail.
+    await recordActivity({
+      activityType: 'schedule_requested',
+      scheduleId: Object.values(scheduleIds)[0],
+      actorUserId: userId,
+      metadata: { bookingsCreated: created.length, skipped: skipped.length, deskNumber: best.desk_number },
+      description: `Recurring schedule requested — ${created.length} booking(s) on Desk# ${best.desk_number}`,
+    }, client);
 
     await client.query('COMMIT');
 

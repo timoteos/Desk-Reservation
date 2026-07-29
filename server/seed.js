@@ -6,6 +6,7 @@ require('dotenv').config();
 const { pool, query } = require('./db');
 const { generateConfirmationCode } = require('./lib/reservationShape');
 const { hashPassword } = require('./lib/auth');
+const { seedActivities } = require('./lib/activityLog');
 
 // A development fixture, not a credential. Printed on seed so it's findable,
 // and it only ever exists in a local database. Any real deployment must set a
@@ -56,7 +57,7 @@ const RESERVATIONS = [
 
 async function seed() {
   await query(
-    'TRUNCATE reservations, recurring_schedules, users, desks, roles RESTART IDENTITY CASCADE'
+    'TRUNCATE logs, reservations, recurring_schedules, users, desks, roles RESTART IDENTITY CASCADE'
   );
   console.log('Cleared existing data');
 
@@ -69,6 +70,9 @@ async function seed() {
     roleIds[roleType] = rows[0].role_id;
   }
   console.log('Inserted 3 roles');
+
+  await seedActivities();
+  console.log('Inserted activity types');
 
   const adminHash = await hashPassword(DEV_ADMIN_PASSWORD);
 

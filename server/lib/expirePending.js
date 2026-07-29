@@ -1,4 +1,5 @@
 const { query } = require('../db');
+const { recordActivity } = require('./activityLog');
 
 // Pending requests hold their desk — the exclusion constraint includes them —
 // so an unanswered request would freeze a desk indefinitely without this.
@@ -40,6 +41,22 @@ async function expirePending() {
         AND expires_at <= now()
       RETURNING reservation_id`
   );
+
+  // Actor stays null: the sweep is the system, not a person.
+  for (const row of reservations.rows) {
+    await recordActivity({
+      activityType: 'expired',
+      reservationId: row.reservation_id,
+      description: 'Released automatically — not reviewed in time',
+    });
+  }
+  for (const row of schedules.rows) {
+    await recordActivity({
+      activityType: 'expired',
+      scheduleId: row.schedule_id,
+      description: 'Recurring schedule released — not reviewed in time',
+    });
+  }
 
   const expired = schedules.rowCount + reservations.rowCount;
   if (expired > 0) {

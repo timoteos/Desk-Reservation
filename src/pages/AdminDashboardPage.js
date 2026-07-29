@@ -2,10 +2,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, X, Check, CalendarDays, Users, ScrollText, Inbox, CalendarClock, CalendarPlus, Copy } from 'lucide-react';
 import AdminBookingModal from '../components/AdminBookingModal';
 import ReservationsTab from '../components/ReservationsTab';
+import LogsTab from '../components/LogsTab';
 import {
   getUsers,
   getUserReservations,
-  getReservationsForDate,
   getRequests,
   decideRequest,
 } from '../api/client';
@@ -176,71 +176,6 @@ function MainTab({ users, selectedUserId, onSelectUser }) {
           Next Page
         </button>
       </div>
-    </div>
-  );
-}
-
-// Until the activity log table exists, this shows today's bookings as the
-// closest available record of system activity.
-function LogsTab() {
-  const [logs, setLogs] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    const now = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-    const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-
-    getReservationsForDate(today)
-      .then((data) => { if (!cancelled) setLogs(data); })
-      .catch(() => { if (!cancelled) setLogs([]); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-
-    return () => { cancelled = true; };
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="bg-gray-200 rounded-2xl p-6 min-h-[300px] flex items-center justify-center">
-        <p className="text-gray-500 text-sm">Loading activity…</p>
-      </div>
-    );
-  }
-
-  if (logs.length === 0) {
-    return (
-      <div className="bg-gray-200 rounded-2xl p-6 min-h-[300px] flex flex-col items-center justify-center gap-2 text-center">
-        <ScrollText className="w-10 h-10 text-gray-400" />
-        <h2 className="text-lg font-semibold text-gray-700">No activity today</h2>
-        <p className="text-gray-500 text-sm max-w-sm">
-          Reservations made today will appear here.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-gray-200 rounded-2xl p-6">
-      <h1 className="text-2xl font-bold text-gray-800 tracking-wide mb-5">RESERVATION LOGS</h1>
-      <div className="flex flex-col gap-3">
-        {logs.map((log) => (
-          <div key={log.id} className="bg-white rounded-lg p-4 flex items-center justify-between gap-4">
-            <div>
-              <p className="font-semibold text-gray-800">{log.user}</p>
-              <p className="text-gray-500 text-sm">
-                Desk# {log.deskNumber} &middot; {formatDate(log.date)}
-              </p>
-            </div>
-            <span className="text-mqd-title text-sm font-medium whitespace-nowrap">
-              {formatMinutes(log.startMin)} - {formatMinutes(log.endMin)}
-            </span>
-          </div>
-        ))}
-      </div>
-      <p className="text-gray-500 text-xs mt-4">
-        Showing {logs.length} reservation{logs.length === 1 ? '' : 's'} from test data.
-      </p>
     </div>
   );
 }
