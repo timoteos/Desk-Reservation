@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
+import BackLink from '../components/BackLink';
 import { getDesks, getReservationsForDate } from '../api/client';
 
 const CRUMBS = [
   { label: 'Landing', path: '/' },
   { label: 'Reservation', path: '/reservation' },
+  { label: 'Calendar', path: '/calendar' },
   { label: 'Desk Selection', path: '/desk-selection' },
 ];
 
@@ -184,8 +186,14 @@ export default function DeskSelectionPage() {
           </div>
         </div>
 
-        {/* Next button */}
-        <div className="w-full max-w-5xl flex justify-end opacity-0 animate-fade-up" style={{ animationDelay: '300ms' }}>
+        {/* Back and Next as a pair. Duration is derivable, and reaching this
+            page means a desk was being chosen, so the calendar restores exactly. */}
+        <div className="w-full max-w-5xl flex items-center justify-between gap-4 opacity-0 animate-fade-up" style={{ animationDelay: '300ms' }}>
+          <BackLink
+            to={`/calendar?startDate=${dateStr}&duration=${endMin - startMin}`
+              + `&type=${searchParams.get('type') || 'hourly'}&deskChoice=pick`}
+            label="Back to date and time"
+          />
           <button
             disabled={!selectedDesk}
             onClick={() => {

@@ -3,12 +3,14 @@ import { useSearchParams } from 'react-router-dom';
 import { Mail, CheckCircle2 } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 import { createReservation } from '../api/client';
+import BackLink from '../components/BackLink';
 
 // Desk Selection is omitted when the desk was assigned automatically, since
 // the user never passed through that step.
 const crumbsFor = (autoAssign) => [
   { label: 'Landing', path: '/' },
   { label: 'Reservation', path: '/reservation' },
+  { label: 'Calendar', path: '/calendar' },
   ...(autoAssign ? [] : [{ label: 'Desk Selection', path: '/desk-selection' }]),
   { label: 'User Confirmation', path: '/request' },
 ];
@@ -147,6 +149,17 @@ export default function UserConfirmationPage() {
               >
                 {submitting ? 'Confirming…' : 'Confirm and Request'}
               </button>
+
+              {/* Sits with the submit action. Auto-assigned bookings skipped
+                  desk selection, so they return to the calendar instead. */}
+              <div className="flex justify-center">
+                <BackLink
+                  to={autoAssign
+                    ? `/calendar?startDate=${dateStr}&duration=${endMin - startMin}&type=hourly&deskChoice=auto`
+                    : `/desk-selection?date=${dateStr}&startMin=${startMin}&endMin=${endMin}&type=hourly`}
+                  label={autoAssign ? 'Back to date and time' : 'Back to desk selection'}
+                />
+              </div>
             </form>
           )}
 

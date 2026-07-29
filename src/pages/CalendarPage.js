@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
+import BackLink from '../components/BackLink';
 import { getReservationsForDate } from '../api/client';
 
 const CRUMBS = [
   { label: 'Landing', path: '/' },
   { label: 'Reservation', path: '/reservation' },
+  { label: 'Calendar', path: '/calendar' },
 ];
 
 const DAY_HEADERS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
@@ -261,6 +263,17 @@ export default function CalendarPage() {
             Next Page
             <ArrowRight className="w-4 h-4" />
           </button>
+
+          {/* Paired with Next rather than floating near the breadcrumb: the
+              two navigation actions belong together, where attention already is. */}
+          <div className="flex justify-center pt-1">
+            <BackLink
+              to={`/reservation?duration=${durationMins}&type=${searchParams.get('type') || 'hourly'}`
+                + `&deskChoice=${searchParams.get('deskChoice') || 'pick'}`
+                + `&startDate=${searchParams.get('startDate') || ''}`}
+              label="Back"
+            />
+          </div>
         </div>
       </div>
     </>
