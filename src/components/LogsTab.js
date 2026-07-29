@@ -10,9 +10,9 @@ const ACTIVITY_STYLES = {
   schedule_requested: 'bg-indigo-100 text-indigo-800',
   approved: 'bg-emerald-100 text-emerald-800',
   denied: 'bg-red-100 text-red-800',
-  canceled: 'bg-gray-200 text-gray-700',
+  canceled: 'bg-surface-panel text-ink-body',
   overridden: 'bg-amber-100 text-amber-800',
-  expired: 'bg-gray-200 text-gray-600',
+  expired: 'bg-surface-panel text-ink-body',
 };
 
 const formatMinutes = (mins) => {
@@ -67,13 +67,13 @@ export default function LogsTab({ dataVersion = 0 }) {
   useEffect(() => { load(); }, [load, dataVersion]);
 
   return (
-    <div className="bg-gray-200 rounded-2xl p-6">
+    <div className="bg-surface-panel border border-surface-line rounded-2xl p-6">
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-        <h1 className="text-2xl font-bold text-gray-800 tracking-wide">ACTIVITY LOG</h1>
+        <h1 className="text-2xl font-bold text-ink ">Activity log</h1>
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="bg-white border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+          className="bg-white border border-surface-line rounded-lg px-3 py-1.5 text-sm text-ink-body focus:outline-none focus:ring-2 focus:ring-mqd-btn"
         >
           <option value="">All activity</option>
           {activityTypes.map((a) => (
@@ -89,11 +89,11 @@ export default function LogsTab({ dataVersion = 0 }) {
       )}
 
       {loading ? (
-        <p className="text-gray-500 text-sm text-center py-10">Loading activity…</p>
+        <p className="text-ink-muted text-sm text-center py-10">Loading activity…</p>
       ) : logs.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-10 text-center">
-          <ScrollText className="w-9 h-9 text-gray-400" />
-          <p className="text-gray-600 text-sm">
+          <ScrollText className="w-9 h-9 text-ink-muted" />
+          <p className="text-ink-body text-sm">
             {filter ? 'No activity of that kind yet.' : 'No activity recorded yet.'}
           </p>
         </div>
@@ -104,14 +104,14 @@ export default function LogsTab({ dataVersion = 0 }) {
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded ${ACTIVITY_STYLES[log.activity] || 'bg-gray-100 text-gray-600'}`}>
+                    <span className={`text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded ${ACTIVITY_STYLES[log.activity] || 'bg-surface-panel text-ink-body'}`}>
                       {log.label}
                     </span>
-                    <span className="text-sm font-semibold text-gray-800">{actorLabel(log)}</span>
+                    <span className="text-sm font-semibold text-ink">{actorLabel(log)}</span>
                   </div>
 
                   {log.subject && (
-                    <p className="text-gray-500 text-sm mt-1">
+                    <p className="text-ink-muted text-sm mt-1">
                       {/* Naming the subject only when it differs from the actor
                           avoids "Steve Elias — Steve Elias" on self-service. */}
                       {actorLabel(log) !== log.subject && <>{log.subject} &middot; </>}
@@ -122,11 +122,11 @@ export default function LogsTab({ dataVersion = 0 }) {
                   )}
 
                   {log.description && (
-                    <p className="text-gray-400 text-xs mt-1">{log.description}</p>
+                    <p className="text-ink-muted text-xs mt-1">{log.description}</p>
                   )}
                 </div>
 
-                <span className="text-xs text-gray-400 whitespace-nowrap shrink-0">
+                <span className="text-xs text-ink-muted whitespace-nowrap shrink-0">
                   {formatWhen(log.occurredAt)}
                 </span>
               </div>
@@ -135,7 +135,7 @@ export default function LogsTab({ dataVersion = 0 }) {
         </div>
       )}
 
-      <p className="text-gray-500 text-xs mt-4">
+      <p className="text-ink-muted text-xs mt-4">
         Showing the {logs.length} most recent {filter ? 'matching ' : ''}event{logs.length === 1 ? '' : 's'}.
       </p>
     </div>

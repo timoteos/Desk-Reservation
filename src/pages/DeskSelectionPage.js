@@ -67,9 +67,9 @@ export default function DeskSelectionPage() {
     <>
       <Breadcrumb crumbs={CRUMBS} />
 
-      <div className="flex-1 flex flex-col items-center px-8 py-6 gap-4 bg-gray-50">
+      <div className="flex-1 flex flex-col items-center px-8 py-6 gap-4 bg-surface-page">
         {/* Date / time header */}
-        <div className="flex items-center justify-between w-full max-w-5xl bg-white rounded-xl shadow-md border border-gray-100 px-6 py-4 opacity-0 animate-fade-up">
+        <div className="flex items-center justify-between w-full max-w-5xl bg-white rounded-xl border border-surface-line px-6 py-4 opacity-0 animate-fade-up">
           <h2 className="text-lg font-semibold text-mqd-title">{dateLabel}</h2>
           <h2 className="text-lg font-semibold text-mqd-title">{timeLabel}</h2>
         </div>
@@ -81,7 +81,7 @@ export default function DeskSelectionPage() {
         )}
 
         {/* Floor plan with overlaid desks */}
-        <div className="w-full max-w-5xl bg-white rounded-xl shadow-md border border-gray-100 p-3 opacity-0 animate-fade-up" style={{ animationDelay: '100ms' }}>
+        <div className="w-full max-w-5xl bg-white rounded-xl border border-surface-line p-3 opacity-0 animate-fade-up" style={{ animationDelay: '100ms' }}>
         <DeskMap
           desks={desks}
           selectedDeskId={selectedDesk}
@@ -91,7 +91,7 @@ export default function DeskSelectionPage() {
         </div>
 
         {/* Legend */}
-        <div className="w-full max-w-5xl bg-white border border-gray-100 rounded-xl p-4 text-xs text-gray-700 shadow-md self-start opacity-0 animate-fade-up" style={{ animationDelay: '200ms' }}>
+        <div className="w-full max-w-5xl bg-white border border-surface-line rounded-xl p-4 text-xs text-ink-body self-start opacity-0 animate-fade-up" style={{ animationDelay: '200ms' }}>
           <p className="font-semibold mb-2 text-mqd-title">Map Legend:</p>
           <DeskMapLegend />
         </div>

@@ -98,29 +98,29 @@ function Calendar({ selected, onSelect, minDate }) {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-md border border-gray-100 p-5 w-80 max-w-full">
+    <div className="bg-white rounded-xl border border-surface-line p-5 w-80 max-w-full">
       <div className="flex items-center justify-between mb-4">
-        <button onClick={prevMonth} className="text-gray-500 hover:text-mqd-btn p-1 rounded transition">
+        <button onClick={prevMonth} className="text-ink-muted hover:text-mqd-btn p-1 rounded transition">
           <ChevronLeft className="w-5 h-5" />
         </button>
         <div className="flex gap-2">
           <select value={viewMonth} onChange={(e) => setViewMonth(Number(e.target.value))}
-            className="border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-mqd-btn">
+            className="border border-surface-line rounded px-2 py-1 text-sm text-ink-body focus:outline-none focus:ring-2 focus:ring-mqd-btn">
             {MONTHS.map((m, i) => <option key={m} value={i}>{m}</option>)}
           </select>
           <select value={viewYear} onChange={(e) => setViewYear(Number(e.target.value))}
-            className="border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-mqd-btn">
+            className="border border-surface-line rounded px-2 py-1 text-sm text-ink-body focus:outline-none focus:ring-2 focus:ring-mqd-btn">
             {years.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
-        <button onClick={nextMonth} className="text-gray-500 hover:text-mqd-btn p-1 rounded transition">
+        <button onClick={nextMonth} className="text-ink-muted hover:text-mqd-btn p-1 rounded transition">
           <ChevronRight className="w-5 h-5" />
         </button>
       </div>
 
       <div className="grid grid-cols-7 text-center mb-1">
         {DAY_HEADERS.map((d) => (
-          <div key={d} className="text-xs text-gray-500 font-medium py-1">{d}</div>
+          <div key={d} className="text-xs text-ink-muted font-medium py-1">{d}</div>
         ))}
       </div>
 
@@ -132,8 +132,8 @@ function Calendar({ selected, onSelect, minDate }) {
             disabled={isClosed(cell)}
             className={`h-9 w-9 mx-auto rounded-full text-sm flex items-center justify-center transition
               ${isSelected(cell) ? 'bg-mqd-btn text-white font-bold' : ''}
-              ${!isSelected(cell) && !isClosed(cell) ? 'hover:bg-mqd-btn/10 text-gray-800' : ''}
-              ${isClosed(cell) ? 'text-gray-300 cursor-default' : ''}
+              ${!isSelected(cell) && !isClosed(cell) ? 'hover:bg-mqd-btn/10 text-ink' : ''}
+              ${isClosed(cell) ? 'text-mqd-200 cursor-default' : ''}
             `}
           >
             {cell.day}
@@ -232,7 +232,7 @@ export default function CalendarPage() {
     <>
       <Breadcrumb crumbs={CRUMBS} />
 
-      <div className="flex-1 flex flex-wrap items-center justify-center gap-8 md:gap-16 px-4 md:px-8 py-10 bg-gray-50">
+      <div className="flex-1 flex flex-wrap items-center justify-center gap-8 md:gap-16 px-4 md:px-8 py-10 bg-surface-page">
         <div className="opacity-0 animate-fade-up">
           <Calendar
             selected={selectedDate}
@@ -242,19 +242,19 @@ export default function CalendarPage() {
         </div>
 
         {/* Time slot panel */}
-        <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 w-80 max-w-full flex flex-col gap-4 opacity-0 animate-fade-up" style={{ animationDelay: '100ms' }}>
+        <div className="bg-white rounded-xl border border-surface-line p-6 w-80 max-w-full flex flex-col gap-4 opacity-0 animate-fade-up" style={{ animationDelay: '100ms' }}>
           <div className="text-center">
             <p className="text-mqd-title font-semibold">{formattedDate}</p>
-            <p className="text-gray-500 text-xs mt-1">{durationLabel} blocks</p>
+            <p className="text-ink-muted text-xs mt-1">{durationLabel} blocks</p>
           </div>
 
           <div key={dateStr} className="flex flex-col gap-2 max-h-80 overflow-y-auto pr-1 animate-fade-scale">
             {loading || deskCount === null ? (
-              <p className="text-center text-gray-400 text-sm py-6">Checking availability…</p>
+              <p className="text-center text-ink-muted text-sm py-6">Checking availability…</p>
             ) : error ? (
               <p className="text-center text-red-500 text-sm py-6">{error}</p>
             ) : availableSlots.length === 0 ? (
-              <p className="text-center text-gray-500 text-sm py-6">
+              <p className="text-center text-ink-muted text-sm py-6">
                 No availability for {durationLabel} on this day.
               </p>
             ) : (

@@ -110,19 +110,19 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
       onClick={onClose}
     >
       <div
-        className={`bg-white rounded-2xl w-full p-6 relative ${result ? 'max-w-md' : 'max-w-2xl'}`}
+        className={`bg-white rounded-2xl shadow-modal w-full p-6 relative ${result ? 'max-w-md' : 'max-w-2xl'}`}
         onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={onClose}
           aria-label="Close"
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 transition"
+          className="absolute top-4 right-4 text-ink-muted hover:text-ink-body transition"
         >
           <X className="w-5 h-5" />
         </button>
 
         <h2 className="text-mqd-title text-xl font-bold mb-1">Book a desk</h2>
-        <p className="text-gray-500 text-sm mb-5">
+        <p className="text-ink-muted text-sm mb-5">
           {result
             ? 'Booked and approved.'
             : 'Booked directly — no approval needed, since you are the approver.'}
@@ -131,11 +131,11 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
         {result ? (
           <div className="flex flex-col items-center gap-3 text-center py-2">
             <CheckCircle2 className="w-10 h-10 text-mqd-title" />
-            <p className="text-gray-700 text-sm">
+            <p className="text-ink-body text-sm">
               Desk# {result.deskNumber}{bookedFor ? ` for ${bookedFor}` : ''}
             </p>
             <div className="bg-mqd-btn/10 border border-mqd-btn/20 rounded-lg px-6 py-4 w-full">
-              <p className="text-gray-500 text-xs uppercase tracking-wide mb-1">Confirmation code</p>
+              <p className="text-ink-muted text-xs uppercase tracking-wide mb-1">Confirmation code</p>
               <p className="text-mqd-title text-2xl font-bold tracking-[0.15em] font-mono">
                 {result.confirmationCode}
               </p>
@@ -150,14 +150,14 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
         ) : (
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div>
-              <label htmlFor="book-user" className="text-gray-700 font-medium text-sm mb-1.5 block">
+              <label htmlFor="book-user" className="text-ink-body font-medium text-sm mb-1.5 block">
                 Who is it for?
               </label>
               <select
                 id="book-user"
                 value={userId}
                 onChange={(e) => setUserId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-gray-700 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                className="w-full border border-surface-line rounded-lg px-3 py-2.5 text-ink-body text-sm bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
               >
                 <option value="">Select a person…</option>
                 {users.map((u) => (
@@ -168,7 +168,7 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label htmlFor="book-date" className="text-gray-700 font-medium text-sm mb-1.5 block">
+                <label htmlFor="book-date" className="text-ink-body font-medium text-sm mb-1.5 block">
                   Date
                 </label>
                 <input
@@ -177,18 +177,18 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
                   value={date}
                   min={todayValue()}
                   onChange={(e) => setDate(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                  className="w-full border border-surface-line rounded-lg px-3 py-2.5 text-ink-body text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
                 />
               </div>
               <div>
-                <label htmlFor="book-start" className="text-gray-700 font-medium text-sm mb-1.5 block">
+                <label htmlFor="book-start" className="text-ink-body font-medium text-sm mb-1.5 block">
                   From
                 </label>
                 <select
                   id="book-start"
                   value={start}
                   onChange={(e) => handleStartChange(Number(e.target.value))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-gray-700 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                  className="w-full border border-surface-line rounded-lg px-3 py-2.5 text-ink-body text-sm bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
                 >
                   {timeOptions({ to: OFFICE_END - SLOT_MINUTES }).map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
@@ -196,14 +196,14 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
                 </select>
               </div>
               <div>
-                <label htmlFor="book-end" className="text-gray-700 font-medium text-sm mb-1.5 block">
+                <label htmlFor="book-end" className="text-ink-body font-medium text-sm mb-1.5 block">
                   To
                 </label>
                 <select
                   id="book-end"
                   value={end}
                   onChange={(e) => setEnd(Number(e.target.value))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-gray-700 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                  className="w-full border border-surface-line rounded-lg px-3 py-2.5 text-ink-body text-sm bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
                 >
                   {timeOptions({ from: start + SLOT_MINUTES }).map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
@@ -212,7 +212,7 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
               </div>
             </div>
 
-            <p className="text-gray-400 text-xs -mt-1">
+            <p className="text-ink-muted text-xs -mt-1">
               Office hours are {OFFICE_HOURS_LABEL}, Monday to Friday, in {SLOT_MINUTES}-minute blocks.
             </p>
 
@@ -223,9 +223,9 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
             )}
 
             <div>
-              <p className="text-gray-700 font-medium text-sm mb-2">
+              <p className="text-ink-body font-medium text-sm mb-2">
                 Pick a desk for {formatMinutes(start)} – {formatMinutes(end)}
-                <span className="text-gray-400 font-normal"> — optional</span>
+                <span className="text-ink-muted font-normal"> — optional</span>
               </p>
               <DeskMap
                 desks={desks}
@@ -240,7 +240,7 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
               />
               <div className="flex items-center justify-between gap-3 mt-2 flex-wrap">
                 <DeskMapLegend />
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-ink-body">
                   {selectedDesk ? `Selected: Desk# ${selectedDesk.number}` : 'Any free desk'}
                 </p>
               </div>

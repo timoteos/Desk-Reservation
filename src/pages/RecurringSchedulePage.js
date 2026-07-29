@@ -94,8 +94,8 @@ export default function RecurringSchedulePage() {
     <>
       <Breadcrumb crumbs={CRUMBS} />
 
-      <div className="flex-1 flex flex-col items-center justify-center px-8 py-12 bg-gray-50">
-        <div className="w-full max-w-lg flex flex-col gap-6 bg-white rounded-xl shadow-md border border-gray-100 p-8 opacity-0 animate-fade-up">
+      <div className="flex-1 flex flex-col items-center justify-center px-8 py-12 bg-surface-page">
+        <div className="w-full max-w-lg flex flex-col gap-6 bg-white rounded-xl border border-surface-line p-8 opacity-0 animate-fade-up">
 
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full bg-mqd-title/10 flex items-center justify-center shrink-0">
@@ -103,7 +103,7 @@ export default function RecurringSchedulePage() {
             </div>
             <div>
               <h1 className="text-mqd-title text-2xl font-bold">Recurring Schedule</h1>
-              <p className="text-gray-500 text-sm mt-0.5">
+              <p className="text-ink-muted text-sm mt-0.5">
                 Pick your days and set a different time for each one — great for half days.
               </p>
             </div>
@@ -113,15 +113,15 @@ export default function RecurringSchedulePage() {
             <div className="flex flex-col items-center gap-2 text-center py-6">
               <CheckCircle2 className="w-10 h-10 text-mqd-title" />
               <p className="text-mqd-title font-semibold">Request submitted</p>
-              <p className="text-gray-600 text-sm">
+              <p className="text-ink-body text-sm">
                 Desk# {result.deskNumber} &middot; {result.created} booking
                 {result.created === 1 ? '' : 's'} over the next {result.horizonDays} days,
                 pending approval
               </p>
-              <div className="text-gray-500 text-sm w-full space-y-1 mt-2">
+              <div className="text-ink-muted text-sm w-full space-y-1 mt-2">
                 {selectedDays.map((d) => (
                   <p key={d.key}>
-                    <span className="font-medium text-gray-700">{d.label}:</span>{' '}
+                    <span className="font-medium text-ink-body">{d.label}:</span>{' '}
                     {schedule[d.key].start} - {schedule[d.key].end}
                   </p>
                 ))}
@@ -144,7 +144,7 @@ export default function RecurringSchedulePage() {
             <form onSubmit={handleSubmit} className="flex flex-col gap-6">
               {/* Day selection */}
               <div>
-                <p className="text-gray-700 font-medium mb-2">Days of the week</p>
+                <p className="text-ink-body font-medium mb-2">Days of the week</p>
                 <div className="grid grid-cols-5 gap-2">
                   {DAYS.map((day) => {
                     const isSelected = !!schedule[day.key];
@@ -156,7 +156,7 @@ export default function RecurringSchedulePage() {
                         className={`py-3 rounded-lg text-xs sm:text-sm font-semibold border transition
                           ${isSelected
                             ? 'bg-mqd-btn text-white border-mqd-btn'
-                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                            : 'bg-white text-ink-body border-surface-line hover:bg-surface-page'}`}
                       >
                         {day.label.slice(0, 3)}
                       </button>
@@ -168,14 +168,14 @@ export default function RecurringSchedulePage() {
               {/* Per-day time ranges */}
               {selectedDays.length > 0 && (
                 <div className="flex flex-col gap-3">
-                  <p className="text-gray-700 font-medium -mb-1">Time per day</p>
+                  <p className="text-ink-body font-medium -mb-1">Time per day</p>
                   {selectedDays.map((day) => {
                     const { start, end } = schedule[day.key];
                     const isValid = start < end;
                     return (
-                      <div key={day.key} className="border border-gray-200 rounded-lg p-3">
+                      <div key={day.key} className="border border-surface-line rounded-lg p-3">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                          <span className="text-gray-700 font-medium text-sm sm:w-24 shrink-0">{day.label}</span>
+                          <span className="text-ink-body font-medium text-sm sm:w-24 shrink-0">{day.label}</span>
                           <div className="flex items-center gap-2 flex-1">
                             <input
                               type="time"
@@ -183,16 +183,16 @@ export default function RecurringSchedulePage() {
                               min={OFFICE_START}
                               max={OFFICE_END}
                               onChange={(e) => updateDayTime(day.key, 'start', e.target.value)}
-                              className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                              className="flex-1 min-w-0 border border-surface-line rounded-lg px-3 py-2 text-ink-body text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
                             />
-                            <span className="text-gray-400 text-sm shrink-0">to</span>
+                            <span className="text-ink-muted text-sm shrink-0">to</span>
                             <input
                               type="time"
                               value={end}
                               min={OFFICE_START}
                               max={OFFICE_END}
                               onChange={(e) => updateDayTime(day.key, 'end', e.target.value)}
-                              className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                              className="flex-1 min-w-0 border border-surface-line rounded-lg px-3 py-2 text-ink-body text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
                             />
                           </div>
                         </div>
@@ -206,7 +206,7 @@ export default function RecurringSchedulePage() {
               )}
 
               <div>
-                <label htmlFor="recurring-email" className="text-gray-700 font-medium mb-2 flex items-center gap-2">
+                <label htmlFor="recurring-email" className="text-ink-body font-medium mb-2 flex items-center gap-2">
                   <Mail className="w-4 h-4" />
                   Email
                 </label>
@@ -217,11 +217,11 @@ export default function RecurringSchedulePage() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@dhs.hawaii.gov"
                   required
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                  className="w-full border border-surface-line rounded-lg px-4 py-3 text-ink-body text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
                 />
               </div>
 
-              <p className="text-gray-400 text-xs -mt-2">
+              <p className="text-ink-muted text-xs -mt-2">
                 Office hours are {OFFICE_HOURS_LABEL}, Monday through Friday. A desk is
                 assigned automatically and booked for the next 90 days.
               </p>

@@ -8,7 +8,7 @@ export default function BackLink({ to, label }) {
   return (
     <Link
       to={to}
-      className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-mqd-title transition"
+      className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-muted hover:text-mqd-title transition"
     >
       <ArrowLeft className="w-4 h-4" />
       {label}
