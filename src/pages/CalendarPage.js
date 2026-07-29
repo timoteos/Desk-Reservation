@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 import BackLink from '../components/BackLink';
-import { getReservationsForDate } from '../api/client';
+import { getReservationsForDate, getDesks } from '../api/client';
 
 const CRUMBS = [
   { label: 'Landing', path: '/' },
@@ -34,15 +34,21 @@ const formatMinutes = (mins) => {
 // `earliestMin` drops slots that have already started — without it the day's
 // full 8:00–4:30 range is offered even at 4pm, and booking a slot in the past
 // produces a request that expires the moment it's made.
-const getAvailableSlots = (durationMins, bookings, earliestMin = 0) => {
+//
+// A booking only rules out the desk it sits on, so a slot is unavailable only
+// once every desk is taken for that window. Treating any booking as blocking
+// would let one all-day reservation close the whole office.
+const getAvailableSlots = (durationMins, bookings, earliestMin = 0, deskCount = 0) => {
   const slots = [];
   for (let start = DAY_START; start + durationMins <= DAY_END; start += INCREMENT) {
     const end = start + durationMins;
     if (start < earliestMin) continue;
-    const hasConflict = bookings.some(
-      (b) => start < b.endMin && end > b.startMin
+    const taken = new Set(
+      bookings
+        .filter((b) => start < b.endMin && end > b.startMin)
+        .map((b) => b.deskId)
     );
-    if (!hasConflict) {
+    if (taken.size < deskCount) {
       slots.push({ startMin: start, endMin: end, label: `${formatMinutes(start)} to ${formatMinutes(end)}` });
     }
   }
@@ -157,8 +163,19 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState(initDate);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [bookings, setBookings] = useState([]);
+  const [deskCount, setDeskCount] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // How many desks exist decides when a slot is genuinely full, so the office
+  // gaining or losing a desk shouldn't need a code change here.
+  useEffect(() => {
+    let cancelled = false;
+    getDesks()
+      .then((desks) => { if (!cancelled) setDeskCount(desks.length); })
+      .catch((err) => { if (!cancelled) setError(err.message); });
+    return () => { cancelled = true; };
+  }, []);
 
   // Local calendar date — toISOString() converts to UTC and can roll the date.
   const pad = (n) => String(n).padStart(2, '0');
@@ -189,7 +206,7 @@ export default function CalendarPage() {
   const isToday = dateStr === `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   const earliestMin = isToday ? now.getHours() * 60 + now.getMinutes() : 0;
 
-  const availableSlots = getAvailableSlots(durationMins, bookings, earliestMin);
+  const availableSlots = getAvailableSlots(durationMins, bookings, earliestMin, deskCount ?? 0);
 
   const formattedDate = selectedDate.toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
@@ -220,7 +237,7 @@ export default function CalendarPage() {
           </div>
 
           <div key={dateStr} className="flex flex-col gap-2 max-h-80 overflow-y-auto pr-1 animate-fade-scale">
-            {loading ? (
+            {loading || deskCount === null ? (
               <p className="text-center text-gray-400 text-sm py-6">Checking availability…</p>
             ) : error ? (
               <p className="text-center text-red-500 text-sm py-6">{error}</p>
