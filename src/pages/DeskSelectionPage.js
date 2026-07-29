@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 import BackLink from '../components/BackLink';
+import DeskMap, { DeskMapLegend, deskStatuses } from '../components/DeskMap';
 import { getDesks, getReservationsForDate } from '../api/client';
 
 const CRUMBS = [
@@ -26,37 +27,6 @@ const formatDate = (dateStr) => {
   return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 };
 
-// Desk positions as % of the floor plan image — left/top mark the CENTRE of
-// each cubicle, measured from the image pixels (bay pitch ~88px of 1388).
-// transform: translate(-50%, -50%) keeps the label centred on that point.
-//
-// Positions stay here rather than in the database until the admin map editor
-// exists; keyed by desk number so they survive the desks coming from the API.
-const DESK_POSITIONS = {
-  1:  { left: '23.9%', top: '22%' },
-  2:  { left: '30.3%', top: '22%' },
-  3:  { left: '36.7%', top: '22%' },
-  4:  { left: '43.1%', top: '22%' },
-  5:  { left: '49.5%', top: '22%' },
-  6:  { left: '55.8%', top: '22%' },
-  7:  { left: '62.3%', top: '22%' },
-  8:  { left: '68.6%', top: '22%' },
-  9:  { left: '51.6%', top: '75%' },
-  10: { left: '58.2%', top: '75%' },
-  11: { left: '64.4%', top: '75%' },
-  12: { left: '71%',   top: '75%' },
-};
-
-// Two ranges collide when each starts before the other ends.
-const overlaps = (aStart, aEnd, bStart, bEnd) => aStart < bEnd && aEnd > bStart;
-
-const deskColor = (status, selected) => {
-  if (selected) return 'bg-mqd-title ring-2 ring-mqd-title/40';
-  if (status === 'booked') return 'bg-rose-500 opacity-85';
-  if (status === 'partial') return 'bg-amber-400';
-  return 'bg-emerald-500';
-};
-
 export default function DeskSelectionPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -78,16 +48,7 @@ export default function DeskSelectionPage() {
     Promise.all([getDesks(), dateStr ? getReservationsForDate(dateStr) : Promise.resolve([])])
       .then(([deskList, reservations]) => {
         if (cancelled) return;
-        setDesks(
-          deskList.map((desk) => ({
-            ...desk,
-            status: reservations.some(
-              (r) => r.deskNumber === desk.number && overlaps(startMin, endMin, r.startMin, r.endMin)
-            )
-              ? 'booked'
-              : 'available',
-          }))
-        );
+        setDesks(deskStatuses(deskList, reservations, startMin, endMin));
       })
       .catch((err) => {
         if (!cancelled) setError(err.message);
@@ -121,69 +82,18 @@ export default function DeskSelectionPage() {
 
         {/* Floor plan with overlaid desks */}
         <div className="w-full max-w-5xl bg-white rounded-xl shadow-md border border-gray-100 p-3 opacity-0 animate-fade-up" style={{ animationDelay: '100ms' }}>
-        <div className="relative">
-          {/* Map image at its natural aspect ratio so % overlays track it exactly */}
-          <img
-            src={`${process.env.PUBLIC_URL}/office-map.png`}
-            alt="Office floor plan"
-            className="block w-full h-auto rounded-lg border border-gray-200"
-          />
-
-          {loading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-white/60 rounded-lg">
-              <p className="text-gray-600 text-sm font-medium">Checking desk availability…</p>
-            </div>
-          )}
-
-          {/* Desk overlays */}
-          {desks.map((desk) => {
-            const position = DESK_POSITIONS[desk.number];
-            if (!position) return null;
-            const isSelected = selectedDesk === desk.id;
-            const clickable = desk.status !== 'booked';
-            return (
-              <div
-                key={desk.id}
-                onClick={() => clickable && setSelectedDesk(desk.id)}
-                className={`absolute flex items-center justify-center rounded text-white font-bold shadow-md transition select-none whitespace-nowrap overflow-hidden
-                  ${deskColor(desk.status, isSelected)}
-                  ${clickable ? 'cursor-pointer hover:brightness-110' : 'cursor-not-allowed'}
-                `}
-                style={{
-                  left: position.left,
-                  top: position.top,
-                  transform: 'translate(-50%, -50%)',
-                  width: '5.5%',
-                  height: '10%',
-                  fontSize: 'clamp(0.4rem, 1.1vw, 0.6rem)',
-                  padding: '0 4px',
-                }}
-              >
-                <span className="hidden sm:inline">{desk.label}</span>
-                <span className="sm:hidden">{desk.number}</span>
-              </div>
-            );
-          })}
-        </div>
+        <DeskMap
+          desks={desks}
+          selectedDeskId={selectedDesk}
+          onSelect={(desk) => setSelectedDesk(desk.id)}
+          loading={loading}
+        />
         </div>
 
         {/* Legend */}
         <div className="w-full max-w-5xl bg-white border border-gray-100 rounded-xl p-4 text-xs text-gray-700 shadow-md self-start opacity-0 animate-fade-up" style={{ animationDelay: '200ms' }}>
           <p className="font-semibold mb-2 text-mqd-title">Map Legend:</p>
-          <div className="flex flex-wrap gap-x-4 gap-y-1">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-3 rounded bg-emerald-500" />
-              <span>Green - Fully Available</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-3 rounded bg-rose-500" />
-              <span>Red - Fully Booked</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-3 rounded bg-amber-400" />
-              <span>Orange - Partially Available (no extension)</span>
-            </div>
-          </div>
+          <DeskMapLegend />
         </div>
 
         {/* Back and Next as a pair. Duration is derivable, and reaching this

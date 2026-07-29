@@ -17,6 +17,21 @@ const minutesFrom = (time) => {
   return h * 60 + m;
 };
 
+// Renders a booking window the way the log reads it back — "Jul 29, 8:00 AM –
+// 4:30 PM". Built here rather than in the client because the description is
+// stored, and a stored sentence should not depend on who later reads it.
+const fmtTime = (d) => {
+  const h = d.getHours();
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  const hour = h % 12 === 0 ? 12 : h % 12;
+  return `${hour}:${String(d.getMinutes()).padStart(2, '0')} ${suffix}`;
+};
+
+const fmtWindow = (start, end) => {
+  const day = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return `${day}, ${fmtTime(start)} – ${fmtTime(end)}`;
+};
+
 // GET /api/requests — everything awaiting a decision, both kinds in one queue.
 //
 // A recurring request is one item covering many bookings, not many items: a
@@ -176,6 +191,118 @@ router.post('/book', async (req, res, next) => {
       return res.status(409).json({
         message: 'That desk is already reserved for part of this time range.',
       });
+    }
+    next(err);
+  }
+});
+
+// PATCH /api/requests/reservations/:id   { deskId?, date?, startMin?, endMin? }
+//
+// Moves a live booking to a different desk, a different time, or both. One
+// endpoint rather than two because the fields are not independent: freeing up
+// an afternoon may change which desks are available, so a caller that changed
+// the time alone could leave the booking on a desk that is now taken.
+//
+// The holder keeps their booking and their confirmation code — the code
+// identifies the reservation, not the desk, so a code already handed out stays
+// valid and will report the new details.
+router.patch('/reservations/:id', async (req, res, next) => {
+  try {
+    const { deskId, date, startMin, endMin } = req.body;
+
+    const wantsTimeChange = date != null || startMin != null || endMin != null;
+    if (deskId == null && !wantsTimeChange) {
+      return res.status(400).json({ message: 'Nothing to change.' });
+    }
+    // A partial time is ambiguous — half a window cannot be validated against
+    // the other half, so require the whole thing or none of it.
+    if (wantsTimeChange && (date == null || startMin == null || endMin == null)) {
+      return res.status(400).json({
+        message: 'Changing the time needs date, startMin and endMin together.',
+      });
+    }
+
+    const existing = await query(
+      `SELECT r.reservation_id, r.desk_id, r.starts_at, r.ends_at, r.schedule_id,
+              d.desk_number
+         FROM reservations r
+         JOIN desks d ON d.desk_id = r.desk_id
+        WHERE r.reservation_id = $1 AND r.status = 'approved' AND r.ends_at > now()`,
+      [req.params.id]
+    );
+
+    if (existing.rows.length === 0) {
+      return res.status(409).json({
+        message: 'That reservation can no longer be edited — it may be cancelled, or it has ended.',
+      });
+    }
+    const before = existing.rows[0];
+
+    let startsAt = before.starts_at;
+    let endsAt = before.ends_at;
+    if (wantsTimeChange) {
+      ({ startsAt, endsAt } = toTimestamps(date, startMin, endMin));
+      if (endsAt <= startsAt) {
+        return res.status(400).json({ message: 'End time must be after start time.' });
+      }
+      if (startsAt <= new Date()) {
+        return res.status(400).json({ message: 'That time has already passed. Pick a later slot.' });
+      }
+    }
+
+    const nextDeskId = deskId ?? before.desk_id;
+
+    const { rows } = await query(
+      `UPDATE reservations
+          SET desk_id = $2, starts_at = $3, ends_at = $4,
+              decided_by_user_id = $5, decided_at = now()
+        WHERE reservation_id = $1
+        RETURNING reservation_id`,
+      [req.params.id, nextDeskId, startsAt, endsAt, resolveDecider(req)]
+    );
+
+    const deskRow = await query('SELECT desk_number FROM desks WHERE desk_id = $1', [nextDeskId]);
+    const toDeskNumber = deskRow.rows[0]?.desk_number;
+
+    // Record only what actually moved, so the trail doesn't claim a desk
+    // changed when the admin edited the time and left it alone.
+    const changes = {};
+    if (toDeskNumber !== before.desk_number) {
+      changes.desk = { from: before.desk_number, to: toDeskNumber };
+    }
+    if (startsAt.getTime() !== before.starts_at.getTime() || endsAt.getTime() !== before.ends_at.getTime()) {
+      changes.time = {
+        from: { startsAt: before.starts_at, endsAt: before.ends_at },
+        to: { startsAt, endsAt },
+      };
+    }
+
+    const parts = [];
+    if (changes.desk) parts.push(`Desk# ${changes.desk.from} → Desk# ${changes.desk.to}`);
+    if (changes.time) parts.push(`${fmtWindow(before.starts_at, before.ends_at)} → ${fmtWindow(startsAt, endsAt)}`);
+
+    await recordActivity({
+      activityType: 'modified',
+      reservationId: rows[0].reservation_id,
+      actorUserId: resolveDecider(req),
+      metadata: changes,
+      description: parts.join(', ') || 'No change',
+    });
+
+    res.json({
+      id: String(rows[0].reservation_id),
+      deskId: nextDeskId,
+      deskNumber: toDeskNumber,
+      changed: Object.keys(changes),
+    });
+  } catch (err) {
+    if (err.constraint === 'no_double_booking') {
+      return res.status(409).json({
+        message: 'That desk is already reserved for part of this time range.',
+      });
+    }
+    if (err.constraint === 'ends_after_start') {
+      return res.status(400).json({ message: 'End time must be after start time.' });
     }
     next(err);
   }

@@ -11,6 +11,9 @@ const ACTIVITIES = {
   denied: 'Request denied',
   canceled: 'Cancelled by the holder',
   overridden: 'Cancelled by an administrator',
+  // One entry per edit, even when the desk and the time both change — that was
+  // one decision by one person, and splitting it would read as two.
+  modified: 'Edited by an administrator',
   expired: 'Request expired unreviewed',
   schedule_requested: 'Recurring schedule requested',
 };

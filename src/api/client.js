@@ -55,6 +55,13 @@ export const getAllReservations = (scope = 'upcoming') =>
 export const adminCancelReservation = (id) =>
   request(`/api/requests/reservations/${encodeURIComponent(id)}/cancel`, { method: 'PATCH' });
 
+// Moves a booking to a different desk, time, or both. Send only what changed.
+export const adminEditReservation = (id, changes) =>
+  request(`/api/requests/reservations/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(changes),
+  });
+
 export const getReservationByCode = (code) =>
   request(`/api/reservations/code/${encodeURIComponent(code)}`);
 
