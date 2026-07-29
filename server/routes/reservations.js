@@ -6,6 +6,7 @@ const {
   generateConfirmationCode,
 } = require('../lib/reservationShape');
 const { expirePending, expiryFor } = require('../lib/expirePending');
+const { recordActivity } = require('../lib/activityLog');
 
 const router = express.Router();
 
@@ -125,6 +126,12 @@ router.patch('/code/:code/cancel', async (req, res, next) => {
       });
     }
 
+    await recordActivity({
+      activityType: 'canceled',
+      reservationId: rows[0].reservation_id,
+      description: 'Cancelled using the confirmation code',
+    });
+
     res.json({ status: 'canceled' });
   } catch (err) {
     next(err);
@@ -215,7 +222,15 @@ router.post('/', async (req, res, next) => {
       [inserted.rows[0].reservation_id]
     );
 
-    res.status(201).json(rowToReservation(result.rows[0]));
+    const booking = rowToReservation(result.rows[0]);
+    await recordActivity({
+      activityType: 'created',
+      reservationId: inserted.rows[0].reservation_id,
+      actorUserId: resolvedUserId,
+      description: `${booking.user} requested Desk# ${booking.deskNumber}`,
+    });
+
+    res.status(201).json(booking);
   } catch (err) {
     // The database rejects overlapping bookings outright — translate that into
     // something the UI can show rather than a 500.

@@ -86,6 +86,11 @@ export const cancelReservation = (code) =>
 export const adminBook = (payload) =>
   request('/api/requests/book', { method: 'POST', body: JSON.stringify(payload) });
 
+export const getLogs = (activity = '') =>
+  request(`/api/logs${activity ? `?activity=${encodeURIComponent(activity)}` : ''}`);
+
+export const getActivityTypes = () => request('/api/logs/activities');
+
 export const getRequests = () => request('/api/requests');
 
 export const decideRequest = (kind, id, decision) =>

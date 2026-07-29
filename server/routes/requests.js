@@ -3,6 +3,7 @@ const { pool, query } = require('../db');
 const { expirePending } = require('../lib/expirePending');
 const { toTimestamps, generateConfirmationCode } = require('../lib/reservationShape');
 const { requireAdmin } = require('../lib/auth');
+const { recordActivity } = require('../lib/activityLog');
 
 const router = express.Router();
 
@@ -157,6 +158,13 @@ router.post('/book', async (req, res, next) => {
 
     const deskRow = await query('SELECT desk_number FROM desks WHERE desk_id = $1', [resolvedDeskId]);
 
+    await recordActivity({
+      activityType: 'booked_by_admin',
+      reservationId: rows[0].reservation_id,
+      actorUserId: resolveDecider(req),
+      description: `Booked Desk# ${deskRow.rows[0].desk_number} on behalf of a user`,
+    });
+
     res.status(201).json({
       id: String(rows[0].reservation_id),
       confirmationCode: rows[0].confirmation_code,
@@ -195,6 +203,13 @@ router.patch('/reservations/:id/cancel', async (req, res, next) => {
         message: 'That reservation can no longer be canceled — it may already be canceled, or it has ended.',
       });
     }
+    await recordActivity({
+      activityType: 'overridden',
+      reservationId: rows[0].reservation_id,
+      actorUserId: resolveDecider(req),
+      description: 'Cancelled by an administrator without the holder\'s code',
+    });
+
     res.json({ id: String(rows[0].reservation_id), status: 'canceled' });
   } catch (err) {
     next(err);
@@ -225,6 +240,12 @@ router.patch('/one-off/:id', async (req, res, next) => {
         message: 'That request is no longer pending — it may have expired or been decided already.',
       });
     }
+    await recordActivity({
+      activityType: decision,
+      reservationId: rows[0].reservation_id,
+      actorUserId: deciderId,
+    });
+
     res.json({ id: String(rows[0].reservation_id), status: decision });
   } catch (err) {
     next(err);
@@ -282,6 +303,14 @@ router.patch('/recurring/:id', async (req, res, next) => {
         WHERE schedule_id = ANY($2::int[]) AND status = 'pending'`,
       [decision, ids, deciderId]
     );
+
+    await recordActivity({
+      activityType: decision,
+      scheduleId: Number(req.params.id),
+      actorUserId: deciderId,
+      metadata: { bookingsAffected: rowCount },
+      description: `Recurring schedule ${decision} — ${rowCount} booking(s) updated`,
+    }, client);
 
     await client.query('COMMIT');
     res.json({ id: req.params.id, status: decision, bookingsUpdated: rowCount });
