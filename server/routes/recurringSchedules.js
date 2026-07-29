@@ -3,6 +3,7 @@ const { pool, query } = require('../db');
 const { generateConfirmationCode, toDateString } = require('../lib/reservationShape');
 const { expiryFor } = require('../lib/expirePending');
 const { recordActivity } = require('../lib/activityLog');
+const { officeHoursError } = require('../lib/officeHours');
 
 const router = express.Router();
 
@@ -69,8 +70,9 @@ router.post('/', async (req, res, next) => {
     const slots = [];
     for (const [dayKey, times] of Object.entries(days)) {
       const dayNumber = DAY_NUMBERS[dayKey];
-      if (times.endMin <= times.startMin) {
-        return res.status(400).json({ message: `End time must be after start time on ${dayKey}.` });
+      const hoursProblem = officeHoursError(times.startMin, times.endMin);
+      if (hoursProblem) {
+        return res.status(400).json({ message: `${hoursProblem} (${dayKey})` });
       }
       for (const date of occurrencesFor([dayNumber], HORIZON_DAYS)) {
         const startsAt = atTime(date, times.startMin);

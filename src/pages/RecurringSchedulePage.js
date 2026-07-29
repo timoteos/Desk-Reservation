@@ -3,6 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { RotateCcw, CheckCircle2, Mail } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 import { createRecurringSchedule } from '../api/client';
+import {
+  OFFICE_START as OFFICE_START_MIN,
+  OFFICE_END as OFFICE_END_MIN,
+  OFFICE_HOURS_LABEL,
+  toTimeValue,
+} from '../lib/officeHours';
 
 const CRUMBS = [
   { label: 'Landing', path: '/' },
@@ -18,8 +24,8 @@ const DAYS = [
   { key: 'fri', label: 'Friday' },
 ];
 
-const OFFICE_START = '08:00';
-const OFFICE_END = '16:30';
+const OFFICE_START = toTimeValue(OFFICE_START_MIN);
+const OFFICE_END = toTimeValue(OFFICE_END_MIN);
 
 export default function RecurringSchedulePage() {
   const navigate = useNavigate();
@@ -216,7 +222,7 @@ export default function RecurringSchedulePage() {
               </div>
 
               <p className="text-gray-400 text-xs -mt-2">
-                Office hours are 8:00 AM – 4:30 PM, Monday through Friday. A desk is
+                Office hours are {OFFICE_HOURS_LABEL}, Monday through Friday. A desk is
                 assigned automatically and booked for the next 90 days.
               </p>
 

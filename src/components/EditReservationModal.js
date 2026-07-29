@@ -3,23 +3,14 @@ import { X, Check } from 'lucide-react';
 import DeskMap, { DeskMapLegend, deskStatuses } from './DeskMap';
 import { getDesks, getReservationsForDate, adminEditReservation } from '../api/client';
 
-const DAY_START = 480; // 8:00 AM
-const DAY_END = 990;   // 4:30 PM
-
-const toTimeValue = (mins) =>
-  `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
-
-const toMinutes = (value) => {
-  const [h, m] = value.split(':').map(Number);
-  return h * 60 + m;
-};
-
-const formatMinutes = (mins) => {
-  const h = Math.floor(mins / 60);
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  const hour = h % 12 === 0 ? 12 : h % 12;
-  return `${hour}:${String(mins % 60).padStart(2, '0')} ${ampm}`;
-};
+import {
+  OFFICE_START,
+  OFFICE_END,
+  SLOT_MINUTES,
+  OFFICE_HOURS_LABEL,
+  formatMinutes,
+  timeOptions,
+} from '../lib/officeHours';
 
 const formatDate = (dateStr) =>
   new Date(`${dateStr}T00:00:00`).toLocaleDateString('en-US', {
@@ -31,10 +22,20 @@ const formatDate = (dateStr) =>
 // They are not independent: moving a booking to the afternoon changes which
 // desks are free, so the map always reflects the window currently in the form
 // rather than the window the booking started with.
+// A booking made before these office hours were set could sit outside them or
+// off the half hour, and would then match no option — leaving the select blank
+// and the admin unable to tell what the booking currently says.
+const snap = (mins) => {
+  const rounded = Math.round(mins / SLOT_MINUTES) * SLOT_MINUTES;
+  return Math.min(Math.max(rounded, OFFICE_START), OFFICE_END);
+};
+
 export default function EditReservationModal({ reservation, onClose, onSaved }) {
   const [date, setDate] = useState(reservation.date);
-  const [startMin, setStartMin] = useState(reservation.startMin);
-  const [endMin, setEndMin] = useState(reservation.endMin);
+  const [startMin, setStartMin] = useState(() =>
+    Math.min(snap(reservation.startMin), OFFICE_END - SLOT_MINUTES));
+  const [endMin, setEndMin] = useState(() =>
+    Math.max(snap(reservation.endMin), snap(reservation.startMin) + SLOT_MINUTES));
   const [deskId, setDeskId] = useState(reservation.deskId);
 
   const [desks, setDesks] = useState([]);
@@ -42,7 +43,12 @@ export default function EditReservationModal({ reservation, onClose, onSaved }) 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  const validWindow = endMin > startMin;
+  // Moving the start past the end drags the end along rather than leaving an
+  // impossible window on screen.
+  const handleStartChange = (next) => {
+    setStartMin(next);
+    if (endMin <= next) setEndMin(Math.min(next + SLOT_MINUTES, OFFICE_END));
+  };
 
   // Refetches whenever the window moves, because that is exactly when the
   // answer changes. The booking being edited is excluded from the conflict
@@ -131,45 +137,50 @@ export default function EditReservationModal({ reservation, onClose, onSaved }) 
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-mqd-btn"
             />
           </label>
+          {/* Selects rather than time inputs: a time input's min/max are only
+              validation hints, so an out-of-hours time could still be typed. A
+              select cannot hold a value that was never offered. */}
           <label className="text-sm">
             <span className="block text-gray-700 font-medium mb-1">From</span>
-            <input
-              type="time"
-              value={toTimeValue(startMin)}
-              min={toTimeValue(DAY_START)}
-              max={toTimeValue(DAY_END)}
-              onChange={(e) => setStartMin(toMinutes(e.target.value))}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-mqd-btn"
-            />
+            <select
+              value={startMin}
+              onChange={(e) => handleStartChange(Number(e.target.value))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+            >
+              {timeOptions({ to: OFFICE_END - SLOT_MINUTES }).map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
           </label>
           <label className="text-sm">
             <span className="block text-gray-700 font-medium mb-1">To</span>
-            <input
-              type="time"
-              value={toTimeValue(endMin)}
-              min={toTimeValue(DAY_START)}
-              max={toTimeValue(DAY_END)}
-              onChange={(e) => setEndMin(toMinutes(e.target.value))}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-mqd-btn"
-            />
+            <select
+              value={endMin}
+              onChange={(e) => setEndMin(Number(e.target.value))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+            >
+              {/* Starts one slot after the chosen start, so an end at or before
+                  it is not an error to recover from — it cannot be picked. */}
+              {timeOptions({ from: startMin + SLOT_MINUTES }).map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
           </label>
         </div>
 
-        {!validWindow && (
-          <p className="text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm mb-3">
-            End time must be after start time.
-          </p>
-        )}
+        <p className="text-gray-500 text-xs mb-4">
+          Office hours are {OFFICE_HOURS_LABEL}, in {SLOT_MINUTES}-minute blocks.
+        </p>
 
         <p className="text-gray-700 text-sm font-medium mb-2">
-          Pick a desk{validWindow ? ` for ${formatMinutes(startMin)} – ${formatMinutes(endMin)}` : ''}
+          Pick a desk for {formatMinutes(startMin)} – {formatMinutes(endMin)}
         </p>
 
         <DeskMap
-          desks={validWindow ? desks : []}
+          desks={desks}
           selectedDeskId={deskId}
           onSelect={(desk) => setDeskId(desk.id)}
-          loading={loadingDesks && validWindow}
+          loading={loadingDesks}
           compact
         />
 
@@ -189,7 +200,7 @@ export default function EditReservationModal({ reservation, onClose, onSaved }) 
         <div className="flex gap-3 mt-5">
           <button
             onClick={handleSave}
-            disabled={!dirty || !validWindow || saving}
+            disabled={!dirty || saving}
             className="flex-1 bg-mqd-btn hover:bg-mqd-btn-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition flex items-center justify-center gap-2"
           >
             <Check className="w-4 h-4" />

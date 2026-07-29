@@ -7,6 +7,7 @@ const {
 } = require('../lib/reservationShape');
 const { expirePending, expiryFor } = require('../lib/expirePending');
 const { recordActivity } = require('../lib/activityLog');
+const { officeHoursError } = require('../lib/officeHours');
 
 const router = express.Router();
 
@@ -170,6 +171,11 @@ router.post('/', async (req, res, next) => {
       }
       resolvedUserId = rows[0].user_id;
     }
+
+    // Office hours are enforced here, not only in the interface. A request that
+    // never touched the calendar must not be able to book the office at 3am.
+    const hoursProblem = officeHoursError(startMin, endMin);
+    if (hoursProblem) return res.status(400).json({ message: hoursProblem });
 
     const { startsAt, endsAt } = toTimestamps(date, startMin, endMin);
 

@@ -1,17 +1,13 @@
 import { useState } from 'react';
 import { X, CheckCircle2 } from 'lucide-react';
 import { adminBook } from '../api/client';
-
-const OFFICE_START = 480; // 8:00 AM
-const OFFICE_END = 990;   // 4:30 PM
-
-const toTimeValue = (mins) =>
-  `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
-
-const toMinutes = (value) => {
-  const [h, m] = value.split(':').map(Number);
-  return h * 60 + m;
-};
+import {
+  OFFICE_START,
+  OFFICE_END,
+  SLOT_MINUTES,
+  OFFICE_HOURS_LABEL,
+  timeOptions,
+} from '../lib/officeHours';
 
 const todayValue = () => {
   const d = new Date();
@@ -24,14 +20,20 @@ const todayValue = () => {
 export default function AdminBookingModal({ users, onClose, onBooked }) {
   const [userId, setUserId] = useState('');
   const [date, setDate] = useState(todayValue());
-  const [start, setStart] = useState(toTimeValue(OFFICE_START));
-  const [end, setEnd] = useState(toTimeValue(OFFICE_END));
+  const [start, setStart] = useState(OFFICE_START);
+  const [end, setEnd] = useState(OFFICE_END);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
 
-  const validRange = toMinutes(start) < toMinutes(end);
-  const canSubmit = userId && date && validRange && !submitting;
+  // Moving the start past the end drags the end along, so the two can never
+  // describe an impossible window.
+  const handleStartChange = (next) => {
+    setStart(next);
+    if (end <= next) setEnd(Math.min(next + SLOT_MINUTES, OFFICE_END));
+  };
+
+  const canSubmit = userId && date && !submitting;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -43,8 +45,8 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
       const booking = await adminBook({
         userId: Number(userId),
         date,
-        startMin: toMinutes(start),
-        endMin: toMinutes(end),
+        startMin: start,
+        endMin: end,
       });
       setResult(booking);
       onBooked?.();
@@ -135,34 +137,36 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
                 <label htmlFor="book-start" className="text-gray-700 font-medium text-sm mb-1.5 block">
                   From
                 </label>
-                <input
+                <select
                   id="book-start"
-                  type="time"
                   value={start}
-                  onChange={(e) => setStart(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
-                />
+                  onChange={(e) => handleStartChange(Number(e.target.value))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-gray-700 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                >
+                  {timeOptions({ to: OFFICE_END - SLOT_MINUTES }).map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label htmlFor="book-end" className="text-gray-700 font-medium text-sm mb-1.5 block">
                   To
                 </label>
-                <input
+                <select
                   id="book-end"
-                  type="time"
                   value={end}
-                  onChange={(e) => setEnd(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
-                />
+                  onChange={(e) => setEnd(Number(e.target.value))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-gray-700 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                >
+                  {timeOptions({ from: start + SLOT_MINUTES }).map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
               </div>
             </div>
 
-            {!validRange && (
-              <p className="text-red-500 text-xs -mt-2">End time must be after start time.</p>
-            )}
-
             <p className="text-gray-400 text-xs">
-              Office hours are 8:00 AM – 4:30 PM. A free desk is assigned automatically.
+              Office hours are {OFFICE_HOURS_LABEL}, in {SLOT_MINUTES}-minute blocks. A free desk is assigned automatically.
             </p>
 
             {error && (
