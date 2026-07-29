@@ -40,16 +40,20 @@ export const deskStatuses = (
   { currentDeskId, ignoreReservationId } = {}
 ) =>
   desks.map((desk) => {
-    if (currentDeskId != null && String(desk.id) === String(currentDeskId)) {
-      return { ...desk, status: 'current' };
-    }
+    // Conflicts are checked before "current", because moving a booking to a new
+    // time can leave someone else on the desk it used to hold. Marking it
+    // current regardless would hide that and let the save fail on the server.
     const taken = reservations.some(
       (r) =>
         String(r.id) !== String(ignoreReservationId) &&
         r.deskNumber === desk.number &&
         overlaps(startMin, endMin, r.startMin, r.endMin)
     );
-    return { ...desk, status: taken ? 'booked' : 'available' };
+    if (taken) return { ...desk, status: 'booked' };
+    if (currentDeskId != null && String(desk.id) === String(currentDeskId)) {
+      return { ...desk, status: 'current' };
+    }
+    return { ...desk, status: 'available' };
   });
 
 const deskColor = (status, selected) => {
@@ -79,15 +83,12 @@ export function DeskMapLegend({ showCurrent = false, className = '' }) {
   );
 }
 
-// `readOnly` renders the plan for reference only — nothing is clickable, which
-// is what an admin wants when they are just locating a desk number.
 // `compact` shows bare numbers, for when the map is narrower than a page.
 export default function DeskMap({
   desks,
   selectedDeskId = null,
   onSelect,
   loading = false,
-  readOnly = false,
   compact = false,
 }) {
   return (
@@ -110,31 +111,7 @@ export default function DeskMap({
         if (!position) return null;
 
         const isSelected = selectedDeskId != null && String(selectedDeskId) === String(desk.id);
-        const clickable = !readOnly && desk.status !== 'booked';
-
-        const label = compact ? desk.number : desk.label;
-        const shared = `absolute flex items-center justify-center rounded text-white font-bold
-          shadow-md transition select-none whitespace-nowrap overflow-hidden
-          ${deskColor(desk.status, isSelected)}`;
-        const style = {
-          left: position.left,
-          top: position.top,
-          transform: 'translate(-50%, -50%)',
-          width: '5.5%',
-          height: '10%',
-          fontSize: 'clamp(0.4rem, 1.1vw, 0.6rem)',
-          padding: '0 4px',
-        };
-
-        // A div when nothing can be done with it, so the plan isn't a field of
-        // dead buttons for anyone tabbing through it.
-        if (readOnly) {
-          return (
-            <div key={desk.id} className={shared} style={style}>
-              {compact ? label : <><span className="hidden sm:inline">{desk.label}</span><span className="sm:hidden">{desk.number}</span></>}
-            </div>
-          );
-        }
+        const clickable = desk.status !== 'booked';
 
         return (
           <button
@@ -143,10 +120,26 @@ export default function DeskMap({
             disabled={!clickable}
             onClick={() => clickable && onSelect?.(desk)}
             aria-label={`Desk ${desk.number}, ${desk.status}`}
-            className={`${shared} ${clickable ? 'cursor-pointer hover:brightness-110' : 'cursor-not-allowed'}`}
-            style={style}
+            className={`absolute flex items-center justify-center rounded text-white font-bold
+              shadow-md transition select-none whitespace-nowrap overflow-hidden
+              ${deskColor(desk.status, isSelected)}
+              ${clickable ? 'cursor-pointer hover:brightness-110' : 'cursor-not-allowed'}`}
+            style={{
+              left: position.left,
+              top: position.top,
+              transform: 'translate(-50%, -50%)',
+              width: '5.5%',
+              height: '10%',
+              fontSize: 'clamp(0.4rem, 1.1vw, 0.6rem)',
+              padding: '0 4px',
+            }}
           >
-            {compact ? label : <><span className="hidden sm:inline">{desk.label}</span><span className="sm:hidden">{desk.number}</span></>}
+            {compact ? desk.number : (
+              <>
+                <span className="hidden sm:inline">{desk.label}</span>
+                <span className="sm:hidden">{desk.number}</span>
+              </>
+            )}
           </button>
         );
       })}

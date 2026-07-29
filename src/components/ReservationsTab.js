@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { CalendarX, Search } from 'lucide-react';
+import { CalendarX, Search, Pencil } from 'lucide-react';
 import { getAllReservations, adminCancelReservation } from '../api/client';
+import EditReservationModal from './EditReservationModal';
 
 const SCOPES = [
   { key: 'upcoming', label: 'Upcoming' },
@@ -37,9 +38,9 @@ const formatDate = (dateStr) => {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-// Everything listed is approved, so the only thing that stops an override is
-// the booking having already finished.
-const isCancelable = (r) => new Date(`${r.date}T00:00:00`).setMinutes(r.endMin) > Date.now();
+// Everything listed is approved, so the only thing that stops an admin acting
+// on a booking is it having already finished.
+const isLive = (r) => new Date(`${r.date}T00:00:00`).setMinutes(r.endMin) > Date.now();
 
 // dataVersion changes when an admin action elsewhere on the dashboard has
 // altered reservations; onChanged reports this tab's own overrides back so the
@@ -52,6 +53,11 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
   const [filter, setFilter] = useState('');
   const [confirmingId, setConfirmingId] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [editing, setEditing] = useState(null);
+  // Nobody emails the holder when their booking moves, so the admin who did it
+  // is the only person who knows. Say what changed rather than silently
+  // redrawing the row.
+  const [changed, setChanged] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -80,6 +86,13 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
     } finally {
       setBusyId(null);
     }
+  };
+
+  const handleSaved = async (result, { deskChanged, timeChanged }) => {
+    const moved = [deskChanged && 'desk', timeChanged && 'time'].filter(Boolean).join(' and ');
+    setChanged(`${editing.user}'s ${moved} updated. They have not been notified.`);
+    await load();
+    onChanged?.();
   };
 
   // Matches name, desk or code, so an admin can search by whatever the person
@@ -128,6 +141,15 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
         </p>
       )}
 
+      {changed && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg px-4 py-3 text-sm mb-3 flex items-start justify-between gap-3">
+          <span>{changed}</span>
+          <button onClick={() => setChanged(null)} className="font-semibold shrink-0 hover:underline">
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <p className="text-gray-500 text-sm text-center py-10">Loading reservations…</p>
       ) : shown.length === 0 ? (
@@ -153,10 +175,10 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
                     {formatDate(r.date)} &middot; Desk# {r.deskNumber} &middot;{' '}
                     {formatMinutes(r.startMin)} - {formatMinutes(r.endMin)}
                   </p>
-                  <p className="font-mono text-xs text-gray-400 mt-1 select-all">{r.confirmationCode}</p>
+                  <p className="font-mono text-xs text-gray-400 mt-1 select-all">Confirmation Code: {r.confirmationCode}</p>
                 </div>
 
-                {isCancelable(r) && (
+                {isLive(r) && (
                   confirmingId === r.id ? (
                     <div className="flex gap-2 shrink-0">
                       <button
@@ -175,18 +197,38 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
                       </button>
                     </div>
                   ) : (
-                    <button
-                      onClick={() => setConfirmingId(r.id)}
-                      className="shrink-0 border border-red-300 text-red-700 hover:bg-red-50 text-xs font-semibold px-3 py-1.5 rounded transition"
-                    >
-                      Cancel
-                    </button>
+                    // Editing is reversible and the log keeps both values, so it
+                    // needs no confirm step. Cancelling loses the booking with
+                    // no notification, so that one keeps its.
+                    <div className="flex gap-2 shrink-0">
+                      <button
+                        onClick={() => setEditing(r)}
+                        className="border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-semibold px-3 py-1.5 rounded transition flex items-center gap-1.5"
+                      >
+                        <Pencil className="w-3 h-3" />
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => setConfirmingId(r.id)}
+                        className="border border-red-300 text-red-700 hover:bg-red-50 text-xs font-semibold px-3 py-1.5 rounded transition"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   )
                 )}
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {editing && (
+        <EditReservationModal
+          reservation={editing}
+          onClose={() => setEditing(null)}
+          onSaved={handleSaved}
+        />
       )}
 
       <p className="text-gray-500 text-xs mt-4">
