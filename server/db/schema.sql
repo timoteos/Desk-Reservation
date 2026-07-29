@@ -90,6 +90,11 @@ CREATE TABLE reservations (
   decided_by_user_id INTEGER REFERENCES users(user_id),
   decided_at         TIMESTAMPTZ,
   confirmation_code  TEXT NOT NULL UNIQUE,
+  -- How the booking came about. decided_by_user_id cannot answer this: an
+  -- admin approving someone's request and an admin booking on their behalf
+  -- both record the admin, so the two are indistinguishable without it.
+  booking_source     TEXT NOT NULL DEFAULT 'user'
+                     CHECK (booking_source IN ('user', 'admin', 'recurring')),
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
 
   CONSTRAINT ends_after_start CHECK (ends_at > starts_at),

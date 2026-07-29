@@ -8,12 +8,20 @@ const SCOPES = [
   { key: 'all', label: 'All' },
 ];
 
-const STATUS_STYLES = {
-  pending: 'bg-amber-100 text-amber-800',
-  approved: 'bg-emerald-100 text-emerald-800',
-  denied: 'bg-red-100 text-red-800',
-  expired: 'bg-gray-200 text-gray-600',
-  canceled: 'bg-gray-200 text-gray-600',
+// Every row here is approved, so the status would say the same thing on all of
+// them. How the booking came about is the useful distinction — and none of
+// these is better or worse than another, so the colours are distinguishing
+// rather than semantic.
+const SOURCE_LABELS = {
+  user: 'User Booked',
+  admin: 'Admin Booked',
+  recurring: 'Recurring',
+};
+
+const SOURCE_STYLES = {
+  user: 'bg-slate-100 text-slate-700',
+  admin: 'bg-sky-100 text-sky-800',
+  recurring: 'bg-indigo-100 text-indigo-800',
 };
 
 const formatMinutes = (mins) => {
@@ -29,8 +37,9 @@ const formatDate = (dateStr) => {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-// Only a live booking can be overridden; a past or already-decided one can't.
-const isCancelable = (r) => ['pending', 'approved'].includes(r.status);
+// Everything listed is approved, so the only thing that stops an override is
+// the booking having already finished.
+const isCancelable = (r) => new Date(`${r.date}T00:00:00`).setMinutes(r.endMin) > Date.now();
 
 export default function ReservationsTab() {
   const [scope, setScope] = useState('upcoming');
@@ -118,7 +127,7 @@ export default function ReservationsTab() {
         <div className="flex flex-col items-center gap-2 py-10 text-center">
           <CalendarX className="w-9 h-9 text-gray-400" />
           <p className="text-gray-600 text-sm">
-            {term ? 'Nothing matches that search.' : `No ${scope === 'all' ? '' : scope} reservations.`}
+            {term ? 'Nothing matches that search.' : `No ${scope === 'all' ? '' : scope} approved reservations.`}
           </p>
         </div>
       ) : (
@@ -129,8 +138,8 @@ export default function ReservationsTab() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-semibold text-gray-800">{r.user}</p>
-                    <span className={`text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded ${STATUS_STYLES[r.status] || 'bg-gray-100 text-gray-600'}`}>
-                      {r.status}
+                    <span className={`text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded ${SOURCE_STYLES[r.bookingSource] || 'bg-gray-100 text-gray-600'}`}>
+                      {SOURCE_LABELS[r.bookingSource] || r.bookingSource}
                     </span>
                   </div>
                   <p className="text-gray-500 text-sm mt-0.5">

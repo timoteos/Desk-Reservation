@@ -20,6 +20,7 @@ const rowToReservation = (row) => ({
   endMin: toMinutes(row.ends_at),
   status: row.status,
   confirmationCode: row.confirmation_code,
+  bookingSource: row.booking_source,
   user: row.first_name ? `${row.first_name} ${row.last_name}` : undefined,
   userId: row.user_id,
   deskNumber: row.desk_number,
