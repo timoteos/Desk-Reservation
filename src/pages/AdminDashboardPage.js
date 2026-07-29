@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, X, Check, CalendarDays, Users, ScrollText, Inbox, CalendarClock, CalendarPlus, Copy } from 'lucide-react';
+import { Plus, X, Check, Search, CalendarDays, Users, ScrollText, Inbox, CalendarClock, CalendarPlus, Copy } from 'lucide-react';
 import AdminBookingModal from '../components/AdminBookingModal';
 import ReservationsTab from '../components/ReservationsTab';
 import LogsTab from '../components/LogsTab';
@@ -16,8 +16,6 @@ const TABS = [
   { key: 'logs', label: 'Logs', icon: ScrollText },
   { key: 'requests', label: 'Requests', icon: Inbox },
 ];
-
-const USERS_PER_PAGE = 16;
 
 const formatMinutes = (mins) => {
   const h = Math.floor(mins / 60);
@@ -142,10 +140,28 @@ function UserDetailModal({ user, onClose }) {
   );
 }
 
+// Roles carry no ranking here — the chip says which kind of account this is, in
+// the same slate/amber vocabulary the Requests queue already uses for guests.
+const ROLE_STYLES = {
+  admin: 'bg-sky-100 text-sky-800',
+  guest: 'bg-amber-100 text-amber-800',
+  member: 'bg-slate-100 text-slate-700',
+};
+
 function MainTab({ users, selectedUserId, onSelectUser }) {
+  const [filter, setFilter] = useState('');
+
+  // Name or address, since an admin may have either to hand.
+  const term = filter.trim().toLowerCase();
+  const shown = term
+    ? users.filter((u) =>
+        [u.name, u.email].filter(Boolean).some((f) => f.toLowerCase().includes(term))
+      )
+    : users;
+
   return (
     <div className="bg-gray-200 rounded-2xl p-6">
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
         <h1 className="text-2xl font-bold text-gray-800 tracking-wide">USERS</h1>
         <button
           aria-label="Add user"
@@ -155,27 +171,52 @@ function MainTab({ users, selectedUserId, onSelectUser }) {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {users.map((user) => {
-          const isSelected = user.id === selectedUserId;
-          return (
-            <button
-              key={user.id}
-              onClick={() => onSelectUser(user)}
-              className={`bg-mqd-btn hover:bg-mqd-btn-hover text-white text-sm font-semibold py-3 rounded-lg transition
-                ${isSelected ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-gray-200' : ''}`}
-            >
-              {user.name}
-            </button>
-          );
-        })}
+      <div className="relative mb-4">
+        <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <input
+          type="text"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Search by name or email"
+          className="w-full bg-white border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+        />
       </div>
 
-      <div className="flex justify-center mt-6">
-        <button className="bg-gray-500 hover:bg-gray-600 text-white text-sm font-semibold px-6 py-2 rounded-lg transition">
-          Next Page
-        </button>
-      </div>
+      {shown.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 py-10 text-center">
+          <Users className="w-9 h-9 text-gray-400" />
+          <p className="text-gray-600 text-sm">
+            {term ? 'Nothing matches that search.' : 'No users yet.'}
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2 max-h-[28rem] overflow-y-auto pr-1">
+          {shown.map((user) => {
+            const isSelected = user.id === selectedUserId;
+            return (
+              <button
+                key={user.id}
+                onClick={() => onSelectUser(user)}
+                className={`bg-white rounded-lg p-3.5 text-left transition hover:bg-gray-50
+                  ${isSelected ? 'ring-2 ring-mqd-btn' : ''}`}
+              >
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-semibold text-gray-800">{user.name}</p>
+                  <span className={`text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded ${ROLE_STYLES[user.role] || 'bg-gray-100 text-gray-600'}`}>
+                    {user.role}
+                  </span>
+                </div>
+                <p className="text-gray-500 text-sm mt-0.5">{user.email}</p>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <p className="text-gray-500 text-xs mt-4">
+        Showing {shown.length} of {users.length} user{users.length === 1 ? '' : 's'}.
+        {' '}Select someone to see their reservations.
+      </p>
     </div>
   );
 }
@@ -333,7 +374,7 @@ export default function AdminDashboardPage() {
     let cancelled = false;
 
     getUsers()
-      .then((data) => { if (!cancelled) setUsers(data.slice(0, USERS_PER_PAGE)); })
+      .then((data) => { if (!cancelled) setUsers(data); })
       .catch((err) => { if (!cancelled) setUsersError(err.message); });
 
     return () => { cancelled = true; };
