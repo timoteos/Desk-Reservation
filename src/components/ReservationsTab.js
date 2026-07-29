@@ -41,7 +41,10 @@ const formatDate = (dateStr) => {
 // the booking having already finished.
 const isCancelable = (r) => new Date(`${r.date}T00:00:00`).setMinutes(r.endMin) > Date.now();
 
-export default function ReservationsTab() {
+// dataVersion changes when an admin action elsewhere on the dashboard has
+// altered reservations; onChanged reports this tab's own overrides back so the
+// rest of the dashboard can do the same.
+export default function ReservationsTab({ dataVersion = 0, onChanged }) {
   const [scope, setScope] = useState('upcoming');
   const [reservations, setReservations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -59,7 +62,9 @@ export default function ReservationsTab() {
       .finally(() => setLoading(false));
   }, [scope]);
 
-  useEffect(() => { load(); }, [load]);
+  // dataVersion is a reason to refetch, not an input to load, so it belongs on
+  // the effect rather than in the callback's dependencies.
+  useEffect(() => { load(); }, [load, dataVersion]);
 
   const handleCancel = async (id) => {
     setBusyId(id);
@@ -67,6 +72,8 @@ export default function ReservationsTab() {
       await adminCancelReservation(id);
       await load();
       setConfirmingId(null);
+      // An override writes a log entry, so the Logs tab is now stale too.
+      onChanged?.();
     } catch (err) {
       setError(err.message);
       await load();

@@ -323,6 +323,12 @@ export default function AdminDashboardPage() {
   const [busyId, setBusyId] = useState(null);
   const [booking, setBooking] = useState(false);
 
+  // Bumped whenever an admin action changes reservation data. Tabs treat it as
+  // a reason to refetch, so a booking made here shows up without the admin
+  // having to switch tabs and come back.
+  const [dataVersion, setDataVersion] = useState(0);
+  const dataChanged = useCallback(() => setDataVersion((v) => v + 1), []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -351,6 +357,8 @@ export default function AdminDashboardPage() {
     try {
       await decideRequest(request.kind, request.id, decision);
       await loadRequests();
+      // An approval creates reservations and every decision writes a log entry.
+      dataChanged();
     } catch (err) {
       setRequestsError(err.message);
       // Another admin may have decided it, or it lapsed — resync either way.
@@ -397,7 +405,9 @@ export default function AdminDashboardPage() {
           </button>
         </div>
 
-        {activeTab === 'reservations' && <ReservationsTab />}
+        {activeTab === 'reservations' && (
+          <ReservationsTab dataVersion={dataVersion} onChanged={dataChanged} />
+        )}
 
         {activeTab === 'users' && (
           usersError ? (
@@ -408,7 +418,7 @@ export default function AdminDashboardPage() {
             <MainTab users={users} selectedUserId={selectedUser?.id} onSelectUser={setSelectedUser} />
           )
         )}
-        {activeTab === 'logs' && <LogsTab />}
+        {activeTab === 'logs' && <LogsTab dataVersion={dataVersion} />}
         {activeTab === 'requests' && (
           <RequestsTab
             requests={requests}
@@ -426,7 +436,7 @@ export default function AdminDashboardPage() {
         <AdminBookingModal
           users={users}
           onClose={() => setBooking(false)}
-          onBooked={loadRequests}
+          onBooked={dataChanged}
         />
       )}
     </div>

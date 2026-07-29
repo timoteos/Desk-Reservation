@@ -42,7 +42,7 @@ const actorLabel = (log) => {
   return 'System';
 };
 
-export default function LogsTab() {
+export default function LogsTab({ dataVersion = 0 }) {
   const [logs, setLogs] = useState([]);
   const [activityTypes, setActivityTypes] = useState([]);
   const [filter, setFilter] = useState('');
@@ -62,7 +62,9 @@ export default function LogsTab() {
       .finally(() => setLoading(false));
   }, [filter]);
 
-  useEffect(() => { load(); }, [load]);
+  // dataVersion is a reason to refetch, not an input to load, so it belongs on
+  // the effect rather than in the callback's dependencies.
+  useEffect(() => { load(); }, [load, dataVersion]);
 
   return (
     <div className="bg-gray-200 rounded-2xl p-6">
