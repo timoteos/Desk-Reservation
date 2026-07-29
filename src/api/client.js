@@ -48,6 +48,13 @@ async function request(path, options = {}) {
 export const getReservationsForDate = (date) =>
   request(`/api/reservations?date=${encodeURIComponent(date)}`);
 
+// Administrative list. scope: 'upcoming' (default) | 'past' | 'all'
+export const getAllReservations = (scope = 'upcoming') =>
+  request(`/api/reservations?scope=${encodeURIComponent(scope)}`);
+
+export const adminCancelReservation = (id) =>
+  request(`/api/requests/reservations/${encodeURIComponent(id)}/cancel`, { method: 'PATCH' });
+
 export const getReservationByCode = (code) =>
   request(`/api/reservations/code/${encodeURIComponent(code)}`);
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, X, Check, LayoutGrid, ScrollText, Inbox, CalendarClock, CalendarPlus } from 'lucide-react';
+import { Plus, X, Check, CalendarDays, Users, ScrollText, Inbox, CalendarClock, CalendarPlus } from 'lucide-react';
 import AdminBookingModal from '../components/AdminBookingModal';
+import ReservationsTab from '../components/ReservationsTab';
 import {
   getUsers,
   getUserReservations,
@@ -10,7 +11,8 @@ import {
 } from '../api/client';
 
 const TABS = [
-  { key: 'main', label: 'Main', icon: LayoutGrid },
+  { key: 'reservations', label: 'Reservations', icon: CalendarDays },
+  { key: 'users', label: 'Users', icon: Users },
   { key: 'logs', label: 'Logs', icon: ScrollText },
   { key: 'requests', label: 'Requests', icon: Inbox },
 ];
@@ -336,7 +338,7 @@ function RequestsTab({ requests, loading, error, onDecide, busyId }) {
 }
 
 export default function AdminDashboardPage() {
-  const [activeTab, setActiveTab] = useState('main');
+  const [activeTab, setActiveTab] = useState('reservations');
   const [selectedUser, setSelectedUser] = useState(null);
   const [users, setUsers] = useState([]);
   const [usersError, setUsersError] = useState(null);
@@ -421,7 +423,9 @@ export default function AdminDashboardPage() {
           </button>
         </div>
 
-        {activeTab === 'main' && (
+        {activeTab === 'reservations' && <ReservationsTab />}
+
+        {activeTab === 'users' && (
           usersError ? (
             <div className="bg-gray-200 rounded-2xl p-6 min-h-[200px] flex items-center justify-center text-center">
               <p className="text-red-600 text-sm">{usersError}</p>
