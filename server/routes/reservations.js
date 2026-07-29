@@ -26,17 +26,38 @@ router.get('/', async (req, res, next) => {
     // reporting what's booked.
     await expirePending();
 
-    const { date } = req.query;
-    const result = date
-      ? await query(
-          `${SELECT_RESERVATION}
-             WHERE r.starts_at >= $1::date
-               AND r.starts_at <  $1::date + interval '1 day'
-               AND r.status IN ('pending', 'approved')
-             ORDER BY r.starts_at`,
-          [date]
-        )
-      : await query(`${SELECT_RESERVATION} ORDER BY r.starts_at`);
+    const { date, scope } = req.query;
+
+    // Availability for one day is public — the calendar needs it. Listing the
+    // whole booking history is not: it is an administrative view, and no public
+    // caller has ever used it.
+    if (!date && req.user?.role !== 'admin') {
+      return res.status(401).json({ message: 'Sign in to view all reservations.' });
+    }
+
+    let result;
+    if (date) {
+      result = await query(
+        `${SELECT_RESERVATION}
+           WHERE r.starts_at >= $1::date
+             AND r.starts_at <  $1::date + interval '1 day'
+             AND r.status IN ('pending', 'approved')
+           ORDER BY r.starts_at`,
+        [date]
+      );
+    } else if (scope === 'past') {
+      // Most recent first: a past booking is usually looked up because someone
+      // is asking about it now.
+      result = await query(
+        `${SELECT_RESERVATION} WHERE r.ends_at < now() ORDER BY r.starts_at DESC`
+      );
+    } else if (scope === 'all') {
+      result = await query(`${SELECT_RESERVATION} ORDER BY r.starts_at DESC`);
+    } else {
+      result = await query(
+        `${SELECT_RESERVATION} WHERE r.ends_at >= now() ORDER BY r.starts_at`
+      );
+    }
 
     const reservations = result.rows.map(rowToReservation);
 

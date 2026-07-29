@@ -173,6 +173,34 @@ router.post('/book', async (req, res, next) => {
   }
 });
 
+// PATCH /api/requests/reservations/:id/cancel
+//
+// The administrative override: cancel any live booking without needing the
+// holder's confirmation code. Recorded against the admin who did it.
+router.patch('/reservations/:id/cancel', async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      `UPDATE reservations
+          SET status = 'canceled', expires_at = NULL,
+              decided_by_user_id = $2, decided_at = now()
+        WHERE reservation_id = $1
+          AND status IN ('pending', 'approved')
+          AND ends_at > now()
+        RETURNING reservation_id`,
+      [req.params.id, resolveDecider(req)]
+    );
+
+    if (rows.length === 0) {
+      return res.status(409).json({
+        message: 'That reservation can no longer be canceled — it may already be canceled, or it has ended.',
+      });
+    }
+    res.json({ id: String(rows[0].reservation_id), status: 'canceled' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // PATCH /api/requests/one-off/:id   { decision }
 router.patch('/one-off/:id', async (req, res, next) => {
   try {
