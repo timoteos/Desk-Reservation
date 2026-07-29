@@ -8,6 +8,7 @@ import {
   OFFICE_START as DAY_START,
   OFFICE_END as DAY_END,
   SLOT_MINUTES as INCREMENT,
+  WORKING_DAYS,
   formatMinutes,
 } from '../lib/officeHours';
 
@@ -88,9 +89,12 @@ function Calendar({ selected, onSelect, minDate }) {
     selected.getMonth() === viewMonth &&
     selected.getFullYear() === viewYear;
 
-  const isPast = (cell) => {
+  // Weekends are unselectable for the same reason past dates are: the office is
+  // shut, so offering the date only leads to a rejection later.
+  const isClosed = (cell) => {
     if (!cell.current) return true;
-    return new Date(viewYear, viewMonth, cell.day) < earliest;
+    const date = new Date(viewYear, viewMonth, cell.day);
+    return date < earliest || !WORKING_DAYS.includes(date.getDay());
   };
 
   return (
@@ -124,12 +128,12 @@ function Calendar({ selected, onSelect, minDate }) {
         {cells.map((cell, i) => (
           <button
             key={i}
-            onClick={() => !isPast(cell) && cell.current && onSelect(new Date(viewYear, viewMonth, cell.day))}
-            disabled={isPast(cell) || !cell.current}
+            onClick={() => !isClosed(cell) && onSelect(new Date(viewYear, viewMonth, cell.day))}
+            disabled={isClosed(cell)}
             className={`h-9 w-9 mx-auto rounded-full text-sm flex items-center justify-center transition
               ${isSelected(cell) ? 'bg-mqd-btn text-white font-bold' : ''}
-              ${!isSelected(cell) && cell.current && !isPast(cell) ? 'hover:bg-mqd-btn/10 text-gray-800' : ''}
-              ${isPast(cell) || !cell.current ? 'text-gray-300 cursor-default' : ''}
+              ${!isSelected(cell) && !isClosed(cell) ? 'hover:bg-mqd-btn/10 text-gray-800' : ''}
+              ${isClosed(cell) ? 'text-gray-300 cursor-default' : ''}
             `}
           >
             {cell.day}
@@ -144,13 +148,26 @@ export default function CalendarPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
+  // Weekends cannot be selected, so the page must not open on one either —
+  // otherwise landing here on a Saturday shows a day nothing can be booked on.
+  // Normalised to midnight because this value is also the calendar's floor, and
+  // the cells are midnight. Carrying the current time made every cell for today
+  // compare as earlier than the floor, so today could never be selected —
+  // despite slot filtering existing precisely so that today stays bookable.
+  const nextWorkingDay = (d) => {
+    const out = new Date(d);
+    out.setHours(0, 0, 0, 0);
+    while (!WORKING_DAYS.includes(out.getDay())) out.setDate(out.getDate() + 1);
+    return out;
+  };
+
   const initDate = () => {
     const param = searchParams.get('startDate');
     if (param) {
       const d = new Date(param + 'T00:00:00');
-      if (!isNaN(d)) return d;
+      if (!isNaN(d)) return nextWorkingDay(d);
     }
-    return new Date();
+    return nextWorkingDay(new Date());
   };
 
   const durationMins = parseInt(searchParams.get('duration') || '60', 10);

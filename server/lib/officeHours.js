@@ -36,6 +36,23 @@ function officeHoursError(startMin, endMin) {
   return null;
 }
 
+// The office is open Monday to Friday. Recurring schedules already assumed
+// this — DAY_NUMBERS only maps mon–fri — but one-off bookings did not.
+const WORKING_DAYS = [1, 2, 3, 4, 5];
+
+// Accepts a 'YYYY-MM-DD' string or a Date. A bare date string is parsed as UTC,
+// which west of Greenwich lands on the previous day and would report a Monday
+// as a Sunday, so the time is stated explicitly.
+function workingDayError(date) {
+  if (!date) return null;
+  const d = date instanceof Date ? date : new Date(`${date}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return 'That date is not valid.';
+  if (!WORKING_DAYS.includes(d.getDay())) {
+    return 'The office is open Monday to Friday. Pick a weekday.';
+  }
+  return null;
+}
+
 // Convenience for routes that hold timestamps rather than minute offsets.
 const minutesOf = (date) => date.getHours() * 60 + date.getMinutes();
 
@@ -43,8 +60,10 @@ module.exports = {
   OFFICE_START,
   OFFICE_END,
   SLOT_MINUTES,
+  WORKING_DAYS,
   OFFICE_HOURS_LABEL,
   formatMinutes,
   officeHoursError,
+  workingDayError,
   minutesOf,
 };

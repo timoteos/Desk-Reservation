@@ -10,7 +10,14 @@ import {
   OFFICE_HOURS_LABEL,
   formatMinutes,
   timeOptions,
+  isWorkingDay,
 } from '../lib/officeHours';
+
+const todayValue = () => {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
 
 const formatDate = (dateStr) =>
   new Date(`${dateStr}T00:00:00`).toLocaleDateString('en-US', {
@@ -54,6 +61,7 @@ export default function EditReservationModal({ reservation, onClose, onSaved }) 
   // answer changes. The booking being edited is excluded from the conflict
   // check so it doesn't report its own desk as taken.
   useEffect(() => {
+    if (!isWorkingDay(date)) { setDesks([]); setLoadingDesks(false); return undefined; }
     let cancelled = false;
     setLoadingDesks(true);
 
@@ -75,6 +83,10 @@ export default function EditReservationModal({ reservation, onClose, onSaved }) 
     return () => { cancelled = true; };
     // Not deskId — picking a desk doesn't change who else is booked.
   }, [date, startMin, endMin, reservation.id, reservation.deskId]);
+
+  // A date input cannot grey out weekends the way the calendar can, so the
+  // rule is stated instead of enforced by the control.
+  const closedDay = !isWorkingDay(date);
 
   const deskChanged = String(deskId) !== String(reservation.deskId);
   const timeChanged =
@@ -133,6 +145,7 @@ export default function EditReservationModal({ reservation, onClose, onSaved }) 
             <input
               type="date"
               value={date}
+              min={todayValue()}
               onChange={(e) => setDate(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-mqd-btn"
             />
@@ -169,8 +182,14 @@ export default function EditReservationModal({ reservation, onClose, onSaved }) 
         </div>
 
         <p className="text-gray-500 text-xs mb-4">
-          Office hours are {OFFICE_HOURS_LABEL}, in {SLOT_MINUTES}-minute blocks.
+          Office hours are {OFFICE_HOURS_LABEL}, Monday to Friday, in {SLOT_MINUTES}-minute blocks.
         </p>
+
+        {closedDay && (
+          <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm mb-4">
+            The office is closed that day. Pick a weekday.
+          </p>
+        )}
 
         <p className="text-gray-700 text-sm font-medium mb-2">
           Pick a desk for {formatMinutes(startMin)} – {formatMinutes(endMin)}
@@ -200,7 +219,7 @@ export default function EditReservationModal({ reservation, onClose, onSaved }) 
         <div className="flex gap-3 mt-5">
           <button
             onClick={handleSave}
-            disabled={!dirty || saving}
+            disabled={!dirty || closedDay || saving}
             className="flex-1 bg-mqd-btn hover:bg-mqd-btn-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition flex items-center justify-center gap-2"
           >
             <Check className="w-4 h-4" />

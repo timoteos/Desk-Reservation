@@ -7,7 +7,8 @@ const {
 } = require('../lib/reservationShape');
 const { expirePending, expiryFor } = require('../lib/expirePending');
 const { recordActivity } = require('../lib/activityLog');
-const { officeHoursError } = require('../lib/officeHours');
+const { officeHoursError, workingDayError } = require('../lib/officeHours');
+const { bookableDeskError } = require('../lib/deskGuard');
 
 const router = express.Router();
 
@@ -173,7 +174,11 @@ router.post('/', async (req, res, next) => {
     }
 
     // Office hours are enforced here, not only in the interface. A request that
-    // never touched the calendar must not be able to book the office at 3am.
+    // never touched the calendar must not be able to book the office at 3am,
+    // or on a Saturday.
+    const dayProblem = workingDayError(date);
+    if (dayProblem) return res.status(400).json({ message: dayProblem });
+
     const hoursProblem = officeHoursError(startMin, endMin);
     if (hoursProblem) return res.status(400).json({ message: hoursProblem });
 
@@ -186,6 +191,11 @@ router.post('/', async (req, res, next) => {
       return res.status(400).json({
         message: 'That time has already passed. Pick a later slot.',
       });
+    }
+
+    if (deskId != null) {
+      const deskProblem = await bookableDeskError(deskId);
+      if (deskProblem) return res.status(400).json({ message: deskProblem });
     }
 
     // No desk chosen: pick one at random from those free for this window.

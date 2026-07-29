@@ -31,11 +31,17 @@ export default function ReservationPage() {
     searchParams.get('deskChoice') === 'auto' ? 'auto' : 'pick'
   );
 
+  // A full day already fills the office day, so two of them cannot fit inside
+  // one booking. The stepper used to allow up to five, which asked the calendar
+  // for a window longer than the day and reported "no availability" on every
+  // date — blaming occupancy for something that was never bookable.
+  //
+  // Multi-day stays are made as one booking per day until the calendar can span
+  // dates, so the count is capped rather than the message reworded.
+  const maxCount = type === 'hourly' ? 8 : 1;
+
   const decrement = () => setCount((prev) => Math.max(1, prev - 1));
-  const increment = () => {
-    const max = type === 'hourly' ? 8 : 5;
-    setCount((prev) => Math.min(max, prev + 1));
-  };
+  const increment = () => setCount((prev) => Math.min(maxCount, prev + 1));
 
   const handleSeeAvailability = () => {
     const startDate = noEarlierThan || today;
@@ -88,19 +94,23 @@ export default function ReservationPage() {
             <div className="flex items-center gap-4">
               <button
                 onClick={decrement}
-                className="w-12 h-12 rounded-lg border border-gray-300 text-gray-700 text-xl font-bold hover:bg-gray-100 transition flex items-center justify-center"
+                disabled={count <= 1}
+                className="w-12 h-12 rounded-lg border border-gray-300 text-gray-700 text-xl font-bold hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition flex items-center justify-center"
               >
                 −
               </button>
               <span className="text-mqd-title text-xl font-semibold w-10 h-10 flex items-center justify-center rounded-lg bg-mqd-btn/10">{count}</span>
               <button
                 onClick={increment}
-                className="w-12 h-12 rounded-lg border border-gray-300 text-gray-700 text-xl font-bold hover:bg-gray-100 transition flex items-center justify-center"
+                disabled={count >= maxCount}
+                className="w-12 h-12 rounded-lg border border-gray-300 text-gray-700 text-xl font-bold hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition flex items-center justify-center"
               >
                 +
               </button>
               <span className="text-gray-400 text-sm">
-                {type === 'full' ? 'day(s), full workday each' : 'hour(s)'}
+                {type === 'full'
+                  ? 'full workday — book each day separately'
+                  : 'hour(s)'}
               </span>
             </div>
           </div>
