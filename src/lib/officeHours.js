@@ -42,6 +42,17 @@ export const timeOptions = ({ from = OFFICE_START, to = OFFICE_END } = {}) => {
   return options;
 };
 
+// The office is open Monday to Friday. Recurring schedules already assumed
+// this — they only ever offered mon–fri — but one-off bookings did not, so the
+// same system both advertised and ignored the rule.
+export const WORKING_DAYS = [1, 2, 3, 4, 5];
+
+// Takes 'YYYY-MM-DD'. Parsed with an explicit time because a bare date string
+// is read as UTC, which can land on the previous day west of Greenwich and
+// report a Monday as a Sunday.
+export const isWorkingDay = (dateStr) =>
+  !!dateStr && WORKING_DAYS.includes(new Date(`${dateStr}T00:00:00`).getDay());
+
 export const isWithinOfficeHours = (startMin, endMin) =>
   startMin >= OFFICE_START &&
   endMin <= OFFICE_END &&

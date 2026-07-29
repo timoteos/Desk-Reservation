@@ -4,7 +4,8 @@ const { expirePending } = require('../lib/expirePending');
 const { toTimestamps, generateConfirmationCode } = require('../lib/reservationShape');
 const { requireAdmin } = require('../lib/auth');
 const { recordActivity } = require('../lib/activityLog');
-const { officeHoursError } = require('../lib/officeHours');
+const { officeHoursError, workingDayError } = require('../lib/officeHours');
+const { bookableDeskError } = require('../lib/deskGuard');
 
 const router = express.Router();
 
@@ -132,8 +133,16 @@ router.post('/book', async (req, res, next) => {
       });
     }
 
+    const dayProblem = workingDayError(date);
+    if (dayProblem) return res.status(400).json({ message: dayProblem });
+
     const hoursProblem = officeHoursError(startMin, endMin);
     if (hoursProblem) return res.status(400).json({ message: hoursProblem });
+
+    if (deskId != null) {
+      const deskProblem = await bookableDeskError(deskId);
+      if (deskProblem) return res.status(400).json({ message: deskProblem });
+    }
 
     const { startsAt, endsAt } = toTimestamps(date, startMin, endMin);
 
@@ -241,7 +250,15 @@ router.patch('/reservations/:id', async (req, res, next) => {
 
     let startsAt = before.starts_at;
     let endsAt = before.ends_at;
+    if (deskId != null) {
+      const deskProblem = await bookableDeskError(deskId);
+      if (deskProblem) return res.status(400).json({ message: deskProblem });
+    }
+
     if (wantsTimeChange) {
+      const dayProblem = workingDayError(date);
+      if (dayProblem) return res.status(400).json({ message: dayProblem });
+
       const hoursProblem = officeHoursError(startMin, endMin);
       if (hoursProblem) return res.status(400).json({ message: hoursProblem });
 

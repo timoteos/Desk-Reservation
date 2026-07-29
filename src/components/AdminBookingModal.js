@@ -9,6 +9,7 @@ import {
   OFFICE_HOURS_LABEL,
   formatMinutes,
   timeOptions,
+  isWorkingDay,
 } from '../lib/officeHours';
 
 const todayValue = () => {
@@ -48,6 +49,7 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
   // window moves — the same coupling the edit dialog relies on.
   useEffect(() => {
     if (result) return undefined;
+    if (!isWorkingDay(date)) { setDesks([]); setLoadingDesks(false); return undefined; }
     let cancelled = false;
     setLoadingDesks(true);
 
@@ -70,7 +72,10 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
     return () => { cancelled = true; };
   }, [date, start, end, result]);
 
-  const canSubmit = userId && date && !submitting;
+  // A date input cannot grey out weekends the way the calendar can, so the rule
+  // is stated instead of enforced by the control.
+  const closedDay = !isWorkingDay(date);
+  const canSubmit = userId && date && !closedDay && !submitting;
   const selectedDesk = desks.find((d) => String(d.id) === String(deskId));
 
   const handleSubmit = async (e) => {
@@ -208,8 +213,14 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
             </div>
 
             <p className="text-gray-400 text-xs -mt-1">
-              Office hours are {OFFICE_HOURS_LABEL}, in {SLOT_MINUTES}-minute blocks.
+              Office hours are {OFFICE_HOURS_LABEL}, Monday to Friday, in {SLOT_MINUTES}-minute blocks.
             </p>
+
+            {closedDay && (
+              <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm">
+                The office is closed that day. Pick a weekday.
+              </p>
+            )}
 
             <div>
               <p className="text-gray-700 font-medium text-sm mb-2">
