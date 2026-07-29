@@ -203,15 +203,6 @@ export default function CalendarPage() {
     <>
       <Breadcrumb crumbs={CRUMBS} />
 
-      <div className="px-4 md:px-8 bg-gray-50 pt-2">
-        <BackLink
-          to={`/reservation?duration=${durationMins}&type=${searchParams.get('type') || 'hourly'}`
-            + `&deskChoice=${searchParams.get('deskChoice') || 'pick'}`
-            + `&startDate=${searchParams.get('startDate') || ''}`}
-          label="Back to reservation details"
-        />
-      </div>
-
       <div className="flex-1 flex flex-wrap items-center justify-center gap-8 md:gap-16 px-4 md:px-8 py-10 bg-gray-50">
         <div className="opacity-0 animate-fade-up">
           <Calendar
@@ -272,6 +263,17 @@ export default function CalendarPage() {
             Next Page
             <ArrowRight className="w-4 h-4" />
           </button>
+
+          {/* Paired with Next rather than floating near the breadcrumb: the
+              two navigation actions belong together, where attention already is. */}
+          <div className="flex justify-center pt-1">
+            <BackLink
+              to={`/reservation?duration=${durationMins}&type=${searchParams.get('type') || 'hourly'}`
+                + `&deskChoice=${searchParams.get('deskChoice') || 'pick'}`
+                + `&startDate=${searchParams.get('startDate') || ''}`}
+              label="Back"
+            />
+          </div>
         </div>
       </div>
     </>
