@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, CheckCircle2 } from 'lucide-react';
-import { adminBook } from '../api/client';
+import DeskMap, { DeskMapLegend, deskStatuses } from './DeskMap';
+import { adminBook, getDesks, getReservationsForDate } from '../api/client';
 import {
   OFFICE_START,
   OFFICE_END,
   SLOT_MINUTES,
   OFFICE_HOURS_LABEL,
+  formatMinutes,
   timeOptions,
 } from '../lib/officeHours';
 
@@ -17,11 +19,20 @@ const todayValue = () => {
 
 // Lets an admin book without leaving the dashboard — for themselves, or on
 // someone's behalf when a visitor needs a desk arranged for them.
+//
+// Laid out like the edit dialog, and for the same reason: which desks are free
+// depends on the window, so the map has to sit with the times rather than on a
+// separate step. Choosing a desk is optional — leaving it unpicked assigns a
+// free one, which is what an admin booking for themselves usually wants.
 export default function AdminBookingModal({ users, onClose, onBooked }) {
   const [userId, setUserId] = useState('');
   const [date, setDate] = useState(todayValue());
   const [start, setStart] = useState(OFFICE_START);
   const [end, setEnd] = useState(OFFICE_END);
+  const [deskId, setDeskId] = useState(null);
+
+  const [desks, setDesks] = useState([]);
+  const [loadingDesks, setLoadingDesks] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
@@ -33,7 +44,34 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
     if (end <= next) setEnd(Math.min(next + SLOT_MINUTES, OFFICE_END));
   };
 
+  // Availability is a property of the window, so it is refetched whenever the
+  // window moves — the same coupling the edit dialog relies on.
+  useEffect(() => {
+    if (result) return undefined;
+    let cancelled = false;
+    setLoadingDesks(true);
+
+    Promise.all([getDesks(), getReservationsForDate(date)])
+      .then(([deskList, reservations]) => {
+        if (cancelled) return;
+        const withStatus = deskStatuses(deskList, reservations, start, end);
+        setDesks(withStatus);
+        // A desk chosen at one time may be taken at another. Drop the choice
+        // rather than submitting something the server will refuse.
+        setDeskId((current) => {
+          if (current == null) return null;
+          const still = withStatus.find((d) => String(d.id) === String(current));
+          return still && still.status !== 'booked' ? current : null;
+        });
+      })
+      .catch((err) => { if (!cancelled) setError(err.message); })
+      .finally(() => { if (!cancelled) setLoadingDesks(false); });
+
+    return () => { cancelled = true; };
+  }, [date, start, end, result]);
+
   const canSubmit = userId && date && !submitting;
+  const selectedDesk = desks.find((d) => String(d.id) === String(deskId));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -47,6 +85,8 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
         date,
         startMin: start,
         endMin: end,
+        // Omitted rather than null, so the server assigns one.
+        ...(deskId != null ? { deskId: Number(deskId) } : {}),
       });
       setResult(booking);
       onBooked?.();
@@ -60,9 +100,12 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
   const bookedFor = users.find((u) => u.id === userId)?.name;
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 bg-black/40 flex items-start justify-center z-50 px-4 py-8 overflow-y-auto"
+      onClick={onClose}
+    >
       <div
-        className="bg-white rounded-xl shadow-lg w-full max-w-md p-6 relative"
+        className={`bg-white rounded-2xl w-full p-6 relative ${result ? 'max-w-md' : 'max-w-2xl'}`}
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -109,7 +152,7 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
                 id="book-user"
                 value={userId}
                 onChange={(e) => setUserId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-gray-700 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
               >
                 <option value="">Select a person…</option>
                 {users.map((u) => (
@@ -118,21 +161,20 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
               </select>
             </div>
 
-            <div>
-              <label htmlFor="book-date" className="text-gray-700 font-medium text-sm mb-1.5 block">
-                Date
-              </label>
-              <input
-                id="book-date"
-                type="date"
-                value={date}
-                min={todayValue()}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label htmlFor="book-date" className="text-gray-700 font-medium text-sm mb-1.5 block">
+                  Date
+                </label>
+                <input
+                  id="book-date"
+                  type="date"
+                  value={date}
+                  min={todayValue()}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                />
+              </div>
               <div>
                 <label htmlFor="book-start" className="text-gray-700 font-medium text-sm mb-1.5 block">
                   From
@@ -165,9 +207,33 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
               </div>
             </div>
 
-            <p className="text-gray-400 text-xs">
-              Office hours are {OFFICE_HOURS_LABEL}, in {SLOT_MINUTES}-minute blocks. A free desk is assigned automatically.
+            <p className="text-gray-400 text-xs -mt-1">
+              Office hours are {OFFICE_HOURS_LABEL}, in {SLOT_MINUTES}-minute blocks.
             </p>
+
+            <div>
+              <p className="text-gray-700 font-medium text-sm mb-2">
+                Pick a desk for {formatMinutes(start)} – {formatMinutes(end)}
+                <span className="text-gray-400 font-normal"> — optional</span>
+              </p>
+              <DeskMap
+                desks={desks}
+                selectedDeskId={deskId}
+                // Clicking the chosen desk again clears it, so going back to
+                // "any free desk" doesn't mean closing the dialog and starting over.
+                onSelect={(desk) =>
+                  setDeskId((current) => (String(current) === String(desk.id) ? null : desk.id))
+                }
+                loading={loadingDesks}
+                compact
+              />
+              <div className="flex items-center justify-between gap-3 mt-2 flex-wrap">
+                <DeskMapLegend />
+                <p className="text-sm text-gray-600">
+                  {selectedDesk ? `Selected: Desk# ${selectedDesk.number}` : 'Any free desk'}
+                </p>
+              </div>
+            </div>
 
             {error && (
               <p className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
@@ -180,7 +246,11 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
               disabled={!canSubmit}
               className="w-full bg-mqd-btn hover:bg-mqd-btn-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg text-sm transition"
             >
-              {submitting ? 'Booking…' : 'Book desk'}
+              {submitting
+                ? 'Booking…'
+                : selectedDesk
+                  ? `Book Desk# ${selectedDesk.number}`
+                  : 'Book any free desk'}
             </button>
           </form>
         )}
