@@ -26,9 +26,14 @@ const PORT = process.env.SERVER_PORT || process.env.PORT || 5000;
 // booking and lookup endpoints are deliberately public, so without an allowlist
 // any site could drive them from a visitor's browser. Comma-separated origins,
 // and with none set it stays open so local development is unchanged.
+// Trailing slashes stripped, because an Origin header never carries one and
+// this is exact string matching — so `https://example.com/` in the host's
+// dashboard silently allows nothing, and the symptom is a CORS failure that
+// looks like the allowlist was never set. The same character already cost an
+// evening on REACT_APP_API_URL; it is not worth a second one.
 const allowedOrigins = (process.env.CORS_ORIGINS || '')
   .split(',')
-  .map((o) => o.trim())
+  .map((o) => o.trim().replace(/\/+$/, ''))
   .filter(Boolean);
 
 app.use(cors(
