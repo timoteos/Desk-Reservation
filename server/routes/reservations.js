@@ -12,30 +12,22 @@ const { bookableDeskError } = require('../lib/deskGuard');
 
 const router = express.Router();
 
-// series_id identifies the whole submission, not one weekday of it. A Mon/Wed/Fri
-// pattern is three recurring_schedules rows — one per day — so grouping by
-// schedule_id alone would still show three entries for one request.
+// series_id identifies the whole arrangement, not one weekday of it. A Mon/Wed/Fri
+// pattern is three recurring_schedules rows, and they are one schedule.
 //
-// Rows from a single submission share user, desk and creation second, which is
-// exactly how the approval queue groups them; the same rule is used here so the
-// two views agree about what counts as one schedule.
+// This used to be derived here with a lateral join matching on user, desk and
+// creation second. A stored column replaces it: the derivation could not survive
+// a schedule being edited, and this reads as what it is.
 const SELECT_RESERVATION = `
   SELECT r.reservation_id, r.user_id, r.desk_id, r.starts_at, r.ends_at,
          r.status, r.confirmation_code, r.booking_source, r.schedule_id,
-         grp.series_id,
+         s.series_id,
          u.first_name, u.last_name,
          d.desk_number
     FROM reservations r
     JOIN users u ON u.user_id = r.user_id
     JOIN desks d ON d.desk_id = r.desk_id
     LEFT JOIN recurring_schedules s ON s.schedule_id = r.schedule_id
-    LEFT JOIN LATERAL (
-      SELECT min(s2.schedule_id) AS series_id
-        FROM recurring_schedules s2
-       WHERE s2.user_id = s.user_id
-         AND s2.desk_id IS NOT DISTINCT FROM s.desk_id
-         AND date_trunc('second', s2.created_at) = date_trunc('second', s.created_at)
-    ) grp ON s.schedule_id IS NOT NULL
 `;
 
 // GET /api/reservations?date=YYYY-MM-DD

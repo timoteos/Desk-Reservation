@@ -54,10 +54,10 @@ router.get('/', async (req, res, next) => {
         ORDER BY r.starts_at`
     );
 
-    // Grouped by request: the rows a single submission created share a user,
-    // desk and creation time, so they collapse into one queue entry.
+    // Grouped by series: the rows one request created share a series_id, so they
+    // collapse into a single queue entry rather than one per weekday.
     const recurring = await query(
-      `SELECT min(s.schedule_id) AS group_id,
+      `SELECT s.series_id AS group_id,
               u.first_name, u.last_name, u.email, ro.role_type,
               d.desk_number,
               min(s.expires_at) AS expires_at,
@@ -78,8 +78,8 @@ router.get('/', async (req, res, next) => {
          JOIN roles ro ON ro.role_id = u.role_id
          LEFT JOIN desks d ON d.desk_id = s.desk_id
         WHERE s.status = 'pending'
-        GROUP BY u.user_id, u.first_name, u.last_name, u.email, ro.role_type,
-                 d.desk_number, date_trunc('second', s.created_at)
+        GROUP BY s.series_id, u.user_id, u.first_name, u.last_name, u.email,
+                 ro.role_type, d.desk_number
         ORDER BY min(s.created_at)`
     );
 
@@ -348,15 +348,11 @@ router.patch('/schedules/:id/cancel', async (req, res, next) => {
     await client.query('BEGIN');
 
     // A Mon/Wed/Fri pattern is three schedule rows, so ending it means ending all
-    // of them. Siblings share user, desk and creation second — the same rule the
-    // approval route uses, so approving and ending agree on what one schedule is.
+    // of them — every row sharing the series_id.
     const { rows: siblings } = await client.query(
       `SELECT s2.schedule_id, u.first_name, u.last_name
          FROM recurring_schedules s1
-         JOIN recurring_schedules s2
-           ON s2.user_id = s1.user_id
-          AND s2.desk_id IS NOT DISTINCT FROM s1.desk_id
-          AND date_trunc('second', s2.created_at) = date_trunc('second', s1.created_at)
+         JOIN recurring_schedules s2 ON s2.series_id = s1.series_id
          JOIN users u ON u.user_id = s2.user_id
         WHERE s1.schedule_id = $1 AND s2.status <> 'canceled'`,
       [req.params.id]
@@ -500,15 +496,12 @@ router.patch('/recurring/:id', async (req, res, next) => {
 
     await client.query('BEGIN');
 
-    // The queue groups schedules by submission, so approving one member of a
-    // group has to carry its siblings — same user, desk and creation second.
+    // Approving one weekday of a pattern has to carry the rest of it, which is
+    // what series_id is for.
     const { rows: group } = await client.query(
       `SELECT s2.schedule_id
          FROM recurring_schedules s1
-         JOIN recurring_schedules s2
-           ON s2.user_id = s1.user_id
-          AND s2.desk_id IS NOT DISTINCT FROM s1.desk_id
-          AND date_trunc('second', s2.created_at) = date_trunc('second', s1.created_at)
+         JOIN recurring_schedules s2 ON s2.series_id = s1.series_id
         WHERE s1.schedule_id = $1 AND s2.status = 'pending'`,
       [req.params.id]
     );

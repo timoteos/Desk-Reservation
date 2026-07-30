@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { CalendarClock, Search, AlertTriangle } from 'lucide-react';
+import { CalendarClock, Search, AlertTriangle, Pencil } from 'lucide-react';
 import { getSchedules, adminCancelSeries } from '../api/client';
+import EditScheduleModal from './EditScheduleModal';
 
 // A schedule's state is not a tense, so this is not the Reservations tab's
 // Upcoming/Past/All. An arrangement running August to October is neither
@@ -96,6 +97,7 @@ export default function SchedulesTab({ dataVersion = 0, onChanged }) {
   const [confirmingId, setConfirmingId] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [editing, setEditing] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -126,6 +128,19 @@ export default function SchedulesTab({ dataVersion = 0, onChanged }) {
     } finally {
       setBusyId(null);
     }
+  };
+
+  const handleSaved = async (schedule, result) => {
+    setNotice(
+      `${schedule.name}'s schedule updated — Desk# ${result.deskNumber}, `
+      + `${result.regenerated} booking${result.regenerated === 1 ? '' : 's'} from today onward. `
+      + (result.cappedAtCeiling
+        ? `Capped at a year, so it runs to ${result.activeUntil}. `
+        : '')
+      + 'Days already worked are unchanged. They have not been notified.'
+    );
+    await load();
+    onChanged?.();
   };
 
   const search = term.trim().toLowerCase();
@@ -308,12 +323,23 @@ export default function SchedulesTab({ dataVersion = 0, onChanged }) {
                         </div>
                       </div>
                     ) : (
-                      <button
-                        onClick={() => setConfirmingId(s.id)}
-                        className="shrink-0 border border-red-300 text-red-700 hover:bg-red-50 text-xs font-semibold px-3 py-1.5 rounded transition"
-                      >
-                        End
-                      </button>
+                      // Editing is reversible and recorded; ending is not, so only
+                      // one of them asks twice.
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          onClick={() => setEditing(s)}
+                          className="border border-surface-line text-ink-body hover:bg-surface-panel text-xs font-semibold px-3 py-1.5 rounded transition flex items-center gap-1.5"
+                        >
+                          <Pencil className="w-3 h-3" />
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => setConfirmingId(s.id)}
+                          className="border border-red-300 text-red-700 hover:bg-red-50 text-xs font-semibold px-3 py-1.5 rounded transition"
+                        >
+                          End
+                        </button>
+                      </div>
                     )
                   )}
                 </div>
@@ -321,6 +347,14 @@ export default function SchedulesTab({ dataVersion = 0, onChanged }) {
             );
           })}
         </div>
+      )}
+
+      {editing && (
+        <EditScheduleModal
+          schedule={editing}
+          onClose={() => setEditing(null)}
+          onSaved={handleSaved}
+        />
       )}
 
       <p className="text-ink-muted text-xs mt-4">

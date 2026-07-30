@@ -111,7 +111,10 @@ export default function DeskMap({
         if (!position) return null;
 
         const isSelected = selectedDeskId != null && String(selectedDeskId) === String(desk.id);
-        const clickable = desk.status !== 'booked';
+        // 'partial' is shown but not offered: a recurring pattern needs a desk
+        // free on every one of its days, so a desk that is nearly free is still
+        // not usable. Only the booking flows produce 'partial'.
+        const clickable = desk.status === 'available' || desk.status === 'current';
 
         return (
           <button

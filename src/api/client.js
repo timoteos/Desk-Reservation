@@ -58,6 +58,14 @@ export const adminCancelReservation = (id) =>
 // Standing arrangements rather than bookings — who holds a desk, and until when.
 export const getSchedules = () => request('/api/schedules');
 
+// Changes a live schedule. Send only what differs; days already served are not
+// affected.
+export const adminEditSchedule = (seriesId, changes) =>
+  request(`/api/schedules/${encodeURIComponent(seriesId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(changes),
+  });
+
 // Ends a recurring schedule and releases the bookings it still holds.
 export const adminCancelSeries = (scheduleId) =>
   request(`/api/requests/schedules/${encodeURIComponent(scheduleId)}/cancel`, { method: 'PATCH' });
