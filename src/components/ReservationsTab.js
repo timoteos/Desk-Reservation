@@ -171,9 +171,12 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
                       {SOURCE_LABELS[r.bookingSource] || r.bookingSource}
                     </span>
                   </div>
+                  {/* Date, then time, then desk — when and then where, which is
+                      the order someone reads a booking in. */}
                   <p className="text-ink-muted text-sm mt-0.5">
-                    {formatDate(r.date)} &middot; Desk# {r.deskNumber} &middot;{' '}
-                    {formatMinutes(r.startMin)} - {formatMinutes(r.endMin)}
+                    {formatDate(r.date)} &middot;{' '}
+                    {formatMinutes(r.startMin)} - {formatMinutes(r.endMin)} &middot;{' '}
+                    Desk# {r.deskNumber}
                   </p>
                   <p className="font-mono text-xs text-ink-muted mt-1 select-all">Confirmation Code: {r.confirmationCode}</p>
                 </div>
