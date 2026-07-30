@@ -2,7 +2,11 @@
 // these functions rather than calling fetch directly, so the API surface is
 // visible in one file and error handling stays consistent.
 
-const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+// Trailing slash stripped, because every path below starts with one and the two
+// concatenate into `https://host//api/...`, which Express does not route — a 404
+// on every single call, from a value that looks entirely correct in the .env file
+// and in the Render dashboard. Costly to diagnose, one character to prevent.
+const BASE_URL = (process.env.REACT_APP_API_URL || 'http://localhost:5001').replace(/\/+$/, '');
 
 class ApiError extends Error {
   constructor(message, status) {
