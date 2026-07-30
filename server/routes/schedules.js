@@ -51,8 +51,21 @@ router.get('/', async (req, res, next) => {
       `SELECT s.series_id,
               array_agg(s.schedule_id ORDER BY s.day_of_week) AS schedule_ids,
               u.first_name, u.last_name, u.email,
-              d.desk_number,
-              min(s.status)      AS status,
+              -- The desk comes from the live rows, and the query does not group by
+              -- it. It used to: every row in a series shared a desk, so grouping on
+              -- it was harmless — until an edit could move the live rows while the
+              -- rows it cancelled kept the old desk, which split one arrangement
+              -- into two entries, one of them a phantom reading "canceled, Desk# 11".
+              -- coalesce so an ended or cancelled arrangement, which has no live
+              -- rows left, still says which desk it held.
+              coalesce(min(d.desk_number) FILTER (WHERE s.status <> 'canceled'),
+                       min(d.desk_number))                 AS desk_number,
+              coalesce(min(d.desk_id) FILTER (WHERE s.status <> 'canceled'),
+                       min(d.desk_id))                     AS desk_id,
+              -- Cancelled rows are excluded here for the same reason as below: a
+              -- weekday dropped by an edit is a cancelled row, and letting it into
+              -- min() would report the whole arrangement as cancelled.
+              min(s.status) FILTER (WHERE s.status <> 'canceled') AS status,
               min(s.active_from) FILTER (WHERE s.status <> 'canceled') AS active_from,
               max(s.active_until) FILTER (WHERE s.status <> 'canceled') AS active_until,
               bool_or(s.active_until IS NULL) FILTER (WHERE s.status <> 'canceled') AS open_ended,
@@ -101,7 +114,7 @@ router.get('/', async (req, res, next) => {
          JOIN users u   ON u.user_id = s.user_id
          LEFT JOIN desks d ON d.desk_id = s.desk_id
          LEFT JOIN users dec ON dec.user_id = s.decided_by_user_id
-        GROUP BY s.series_id, u.user_id, u.first_name, u.last_name, u.email, d.desk_number
+        GROUP BY s.series_id, u.user_id, u.first_name, u.last_name, u.email
         ORDER BY min(s.created_at) DESC`
     );
 
@@ -113,6 +126,7 @@ router.get('/', async (req, res, next) => {
         scheduleIds: row.schedule_ids,
         name: `${row.first_name} ${row.last_name}`,
         email: row.email,
+        deskId: row.desk_id,
         deskNumber: row.desk_number,
         state: scheduleState(row, today),
         activeFrom: row.active_from ? toDateString(row.active_from) : null,
@@ -219,7 +233,9 @@ router.patch('/:seriesId', async (req, res, next) => {
       [seriesId, req.user?.sub ?? null]
     );
 
-    const availability = await deskAvailability(client, plan.slots);
+    const availability = await deskAvailability(client, plan.slots, {
+      ignoreSeriesId: seriesId,
+    });
     const target = availability.find((d) => d.deskId === nextDeskId);
     if (!target) {
       await client.query('ROLLBACK');

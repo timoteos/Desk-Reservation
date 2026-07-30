@@ -13,7 +13,7 @@ const {
 const router = express.Router();
 
 // POST /api/recurring-schedules/availability
-// { days, activeFrom?, activeUntil? }
+// { days, activeFrom?, activeUntil?, ignoreSeriesId? }
 //
 // What each desk could offer this pattern, so the requester can choose rather
 // than being assigned one and told afterwards. A preview rather than a GET
@@ -24,7 +24,11 @@ router.post('/availability', async (req, res, next) => {
     const plan = planPattern(req.body || {});
     if (plan.error) return res.status(400).json({ message: plan.error });
 
-    const desks = await deskAvailability(client, plan.slots);
+    // An edit previews against a pattern the schedule itself already occupies,
+    // so it says which schedule to discount. Left out by a new request.
+    const desks = await deskAvailability(client, plan.slots, {
+      ignoreSeriesId: req.body?.ignoreSeriesId ? Number(req.body.ignoreSeriesId) : null,
+    });
 
     res.json({
       occurrences: plan.slots.length,

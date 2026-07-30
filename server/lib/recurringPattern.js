@@ -133,7 +133,12 @@ function planPattern({ days, activeFrom, activeUntil }) {
 // Availability for a recurring pattern is not a yes or a no: a desk booked on
 // three Tuesdays out of sixty-five occurrences is neither free nor unusable.
 // Callers get the counts and decide what to do with a partial.
-async function deskAvailability(client, slots) {
+//
+// `ignoreSeriesId` drops one schedule's own bookings from the count. An edit
+// releases its upcoming occurrences before it checks, so its current desk must
+// not be reported as taken by the thing being moved — the same reason editing a
+// single booking ignores itself.
+async function deskAvailability(client, slots, { ignoreSeriesId = null } = {}) {
   const { rows: desks } = await client.query(
     'SELECT desk_id, desk_number FROM desks WHERE is_active ORDER BY desk_number'
   );
@@ -148,11 +153,13 @@ async function deskAvailability(client, slots) {
          FROM reservations r
         WHERE r.desk_id = $1
           AND r.status IN ('pending', 'approved')
+          AND ($4::int IS NULL OR r.schedule_id IS NULL OR r.schedule_id NOT IN (
+                SELECT schedule_id FROM recurring_schedules WHERE series_id = $4))
           AND EXISTS (
             SELECT 1 FROM unnest($2::timestamp[], $3::timestamp[]) AS s(starts_at, ends_at)
              WHERE tsrange(r.starts_at, r.ends_at) && tsrange(s.starts_at, s.ends_at)
           )`,
-      [desk.desk_id, starts, ends]
+      [desk.desk_id, starts, ends, ignoreSeriesId]
     );
     out.push({
       deskId: desk.desk_id,
