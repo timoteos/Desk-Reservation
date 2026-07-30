@@ -35,14 +35,12 @@ function scheduleState(row, today) {
 
 // GET /api/schedules
 //
-// One entry per submission, matching how the approval queue and the Reservations
-// tab group them: rows from one request share a user, a desk and a creation
-// second. Grouping by schedule_id alone would list a Mon/Wed/Fri pattern three
-// times, once per weekday.
+// One entry per arrangement. A Mon/Wed/Fri pattern is three rows sharing a
+// series_id, so grouping on schedule_id alone would list it three times.
 router.get('/', async (req, res, next) => {
   try {
     const result = await query(
-      `SELECT min(s.schedule_id)                        AS series_id,
+      `SELECT s.series_id,
               array_agg(s.schedule_id ORDER BY s.day_of_week) AS schedule_ids,
               u.first_name, u.last_name, u.email,
               d.desk_number,
@@ -88,8 +86,7 @@ router.get('/', async (req, res, next) => {
          JOIN users u   ON u.user_id = s.user_id
          LEFT JOIN desks d ON d.desk_id = s.desk_id
          LEFT JOIN users dec ON dec.user_id = s.decided_by_user_id
-        GROUP BY u.user_id, u.first_name, u.last_name, u.email, d.desk_number,
-                 date_trunc('second', s.created_at)
+        GROUP BY s.series_id, u.user_id, u.first_name, u.last_name, u.email, d.desk_number
         ORDER BY min(s.created_at) DESC`
     );
 

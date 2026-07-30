@@ -55,6 +55,13 @@ CREATE TABLE recurring_schedules (
   schedule_id   SERIAL PRIMARY KEY,
   user_id       INTEGER NOT NULL REFERENCES users(user_id),
   desk_id       INTEGER REFERENCES desks(desk_id),
+  -- A request covering several weekdays becomes one row per day, and they are
+  -- one arrangement. Identity used to be derived from user + desk + creation
+  -- second, which held only as long as nothing changed: adding a day later gives
+  -- the new row a fresh created_at and drops it out of its own group. Editing a
+  -- schedule needs a real identity, so this is it. Null until the first row of a
+  -- series is inserted, then set to that row's id.
+  series_id     INTEGER REFERENCES recurring_schedules(schedule_id),
   day_of_week   SMALLINT NOT NULL CHECK (day_of_week BETWEEN 1 AND 5),
   start_time    TIME NOT NULL,
   end_time      TIME NOT NULL,

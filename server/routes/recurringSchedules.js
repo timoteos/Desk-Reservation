@@ -235,25 +235,47 @@ router.post('/', async (req, res, next) => {
       return res.status(409).json({ message: 'No desks are configured.' });
     }
 
+    // A schedule is all of its days or none of them.
+    //
+    // A partial one is a different thing wearing the same name. The point of a
+    // recurring booking is that the desk is yours for the duration — you leave
+    // things there and settle in — which cannot be true if somebody else has it
+    // on the third Wednesday. And on a skipped day the holder gets nothing at
+    // all, not an alternative desk, so they would have to track which scattered
+    // dates are not theirs. Refusing is better information than half-granting.
+    //
+    // Once approved the exclusion constraint makes those slots untouchable, so a
+    // schedule that fits at request time really is an exclusive desk.
     let best;
     if (deskId != null) {
-      // An explicit choice is honoured even when partly taken — the requester
-      // was shown how many days it covers and picked it anyway. Refusing here
-      // would contradict what the map offered.
       best = availability.find((d) => d.deskId === Number(deskId));
       if (!best) {
         return res.status(400).json({
           message: 'That desk is not available — it may have been taken out of service.',
         });
       }
-      if (best.bookable === 0) {
+      if (best.conflicts > 0) {
         return res.status(409).json({
-          message: `Desk# ${best.deskNumber} is booked for every day in that pattern. Pick another desk.`,
+          message: `Desk# ${best.deskNumber} is already booked on `
+            + `${best.conflicts} of the ${best.occurrences} days in that pattern, and a schedule `
+            + 'has to cover every day. Pick another desk, or change the dates.',
         });
       }
     } else {
-      // No choice made: the desk that honours the most occurrences.
-      best = availability.reduce((a, b) => (b.conflicts < a.conflicts ? b : a));
+      const clear = availability.filter((d) => d.conflicts === 0);
+      if (clear.length === 0) {
+        // Naming the closest desk makes the refusal actionable: shifting the
+        // dates or clearing a couple of bookings may be all it takes.
+        const closest = availability.reduce((a, b) => (b.conflicts < a.conflicts ? b : a));
+        return res.status(409).json({
+          message: 'No desk is free for every day in that pattern. '
+            + `Desk# ${closest.deskNumber} comes closest, with ${closest.conflicts} of `
+            + `${closest.occurrences} days already booked. Try different dates or days.`,
+        });
+      }
+      // Random among the desks that fit, so schedules spread across the office
+      // rather than piling onto the lowest-numbered desk.
+      best = clear[Math.floor(Math.random() * clear.length)];
     }
 
     const chosenDesk = { desk_id: best.deskId, desk_number: best.deskNumber };
@@ -270,13 +292,17 @@ router.post('/', async (req, res, next) => {
 
     // Pending: the bookings below are generated immediately so the slots are
     // held from the moment of request, then flip to approved in one action.
+    // series_id ties the weekday rows together. The first row inserted names the
+    // series, including itself, so identity does not depend on anything derivable
+    // that a later edit could change.
     const scheduleIds = {};
+    let seriesId = null;
     for (const [dayKey, times] of Object.entries(days)) {
       const { rows } = await client.query(
         `INSERT INTO recurring_schedules
            (user_id, desk_id, day_of_week, start_time, end_time, status, expires_at,
-            active_from, active_until)
-         VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, $8)
+            active_from, active_until, series_id)
+         VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, $8, $9)
          RETURNING schedule_id`,
         [
           userId,
@@ -289,43 +315,41 @@ router.post('/', async (req, res, next) => {
           // Null when open-ended, so the row records that no end was chosen
           // rather than pretending the rolling horizon was a decision.
           openEnded ? null : toDateString(to),
+          seriesId,
         ]
       );
       scheduleIds[dayKey] = rows[0].schedule_id;
+      if (seriesId === null) {
+        seriesId = rows[0].schedule_id;
+        await client.query(
+          'UPDATE recurring_schedules SET series_id = $1 WHERE schedule_id = $1',
+          [seriesId]
+        );
+      }
     }
 
-    // An occurrence that collides with an existing booking is skipped rather
-    // than failing the batch — the constraint rejecting it is correct.
+    // No savepoints: a collision fails the whole request rather than being
+    // skipped. The availability check above should have caught it, so reaching
+    // here means somebody booked the slot in between — a race, not a plan — and
+    // half a schedule is not what was asked for.
     const created = [];
-    const skipped = [];
     for (const slot of slots) {
-      try {
-        await client.query('SAVEPOINT occurrence');
-        await client.query(
-          `INSERT INTO reservations
-             (user_id, desk_id, schedule_id, starts_at, ends_at, confirmation_code,
-              expires_at, booking_source)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, 'recurring')`,
-          [
-            userId,
-            chosenDesk.desk_id,
-            scheduleIds[slot.dayKey],
-            slot.startsAt,
-            slot.endsAt,
-            generateConfirmationCode(),
-            expiresAt,
-          ]
-        );
-        await client.query('RELEASE SAVEPOINT occurrence');
-        created.push(slot);
-      } catch (err) {
-        await client.query('ROLLBACK TO SAVEPOINT occurrence');
-        if (err.constraint === 'no_double_booking') {
-          skipped.push(slot);
-        } else {
-          throw err;
-        }
-      }
+      await client.query(
+        `INSERT INTO reservations
+           (user_id, desk_id, schedule_id, starts_at, ends_at, confirmation_code,
+            expires_at, booking_source)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'recurring')`,
+        [
+          userId,
+          chosenDesk.desk_id,
+          scheduleIds[slot.dayKey],
+          slot.startsAt,
+          slot.endsAt,
+          generateConfirmationCode(),
+          expiresAt,
+        ]
+      );
+      created.push(slot);
     }
 
     // One entry for the request, not one per generated booking — 39 rows would
@@ -334,7 +358,7 @@ router.post('/', async (req, res, next) => {
       activityType: 'schedule_requested',
       scheduleId: Object.values(scheduleIds)[0],
       actorUserId: userId,
-      metadata: { bookingsCreated: created.length, skipped: skipped.length, deskNumber: chosenDesk.desk_number },
+      metadata: { bookingsCreated: created.length, deskNumber: chosenDesk.desk_number },
       description: `Recurring schedule requested — ${created.length} booking(s) on Desk# ${chosenDesk.desk_number}`,
     }, client);
 
@@ -352,14 +376,15 @@ router.post('/', async (req, res, next) => {
       generatedThrough: toDateString(to),
       cappedAtCeiling,
       created: created.length,
-      skipped: skipped.map((s) => ({
-        date: toDateString(s.startsAt),
-        startMin: s.startMin,
-        endMin: s.endMin,
-      })),
     });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
+    if (err.constraint === 'no_double_booking') {
+      return res.status(409).json({
+        message: 'One of those days was booked while this request was being made. '
+          + 'Nothing was reserved — try again.',
+      });
+    }
     next(err);
   } finally {
     client.release();

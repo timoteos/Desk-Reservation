@@ -92,12 +92,12 @@ export default function RecurringSchedulePage() {
       .then((data) => {
         if (cancelled) return;
         setAvailability(data);
-        // A desk that suited the previous pattern may suit this one badly, so a
-        // choice is dropped once it can host nothing.
+        // A desk that fitted the previous pattern may not fit this one, so the
+        // choice is dropped the moment it stops covering every day.
         setDeskId((current) => {
           if (current == null) return null;
           const still = data.desks.find((d) => d.deskId === current);
-          return still && still.bookable > 0 ? current : null;
+          return still && still.conflicts === 0 ? current : null;
         });
       })
       .catch((err) => {
@@ -371,7 +371,7 @@ export default function RecurringSchedulePage() {
                   ) : (
                     <p className="text-ink-muted text-xs mb-2">
                       {availability
-                        ? `${availability.occurrences} booking${availability.occurrences === 1 ? '' : 's'} in this pattern. Amber desks are free for some of them, not all.`
+                        ? `${availability.occurrences} booking${availability.occurrences === 1 ? '' : 's'} in this pattern. A desk has to be free for every one of them — it is yours for the whole run.`
                         : loadingDesks
                           ? 'Working out what each desk can offer…'
                           : 'Pick your days and times to see which desks are free.'}
@@ -383,12 +383,18 @@ export default function RecurringSchedulePage() {
                       id: d.deskId,
                       number: d.deskNumber,
                       label: `Desk# ${d.deskNumber}`,
-                      // Three states, because a pattern's availability is a
-                      // fraction rather than a yes or a no.
+                      // Partial is shown but not offered. A schedule covers every
+                      // day or none — the desk is the holder's for the duration,
+                      // which cannot be true if someone else has it on the third
+                      // Wednesday. Amber still earns its place by distinguishing
+                      // "two days short" from "taken throughout": the first is
+                      // worth shifting your dates for.
                       status:
-                        d.bookable === 0 ? 'booked'
-                          : d.conflicts === 0 ? 'available'
+                        d.conflicts === 0 ? 'available'
+                          : d.bookable === 0 ? 'booked'
                             : 'partial',
+                      conflicts: d.conflicts,
+                      occurrences: d.occurrences,
                     }))}
                     selectedDeskId={deskId}
                     onSelect={(desk) =>
@@ -403,7 +409,7 @@ export default function RecurringSchedulePage() {
                       <span className="w-4 h-3 rounded bg-emerald-500" /> Free every day
                     </span>
                     <span className="flex items-center gap-2">
-                      <span className="w-4 h-3 rounded bg-amber-400" /> Free some days
+                      <span className="w-4 h-3 rounded bg-amber-400" /> Some days taken — can't be used
                     </span>
                     <span className="flex items-center gap-2">
                       <span className="w-4 h-3 rounded bg-rose-500" /> Taken every day
@@ -413,12 +419,14 @@ export default function RecurringSchedulePage() {
                   <p className="text-ink-body text-sm mt-2">
                     {(() => {
                       const chosen = availability?.desks.find((d) => d.deskId === deskId);
-                      if (!chosen) return 'No desk chosen — one will be assigned for you.';
-                      const missing = chosen.occurrences - chosen.bookable;
-                      return missing === 0
-                        ? `Desk# ${chosen.deskNumber} — free for all ${chosen.occurrences} days.`
-                        : `Desk# ${chosen.deskNumber} — free for ${chosen.bookable} of ${chosen.occurrences} days. `
-                          + `The other ${missing} would be skipped.`;
+                      if (!chosen) {
+                        const clear = availability?.desks.filter((d) => d.conflicts === 0).length;
+                        if (availability && clear === 0) {
+                          return 'No desk is free for every day. Try different days or dates.';
+                        }
+                        return 'No desk chosen — one that fits the whole pattern will be assigned.';
+                      }
+                      return `Desk# ${chosen.deskNumber} — free for all ${chosen.occurrences} days.`;
                     })()}
                   </p>
                 </div>
