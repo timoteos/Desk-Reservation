@@ -55,6 +55,9 @@ export const getAllReservations = (scope = 'upcoming') =>
 export const adminCancelReservation = (id) =>
   request(`/api/requests/reservations/${encodeURIComponent(id)}/cancel`, { method: 'PATCH' });
 
+// Standing arrangements rather than bookings — who holds a desk, and until when.
+export const getSchedules = () => request('/api/schedules');
+
 // Ends a recurring schedule and releases the bookings it still holds.
 export const adminCancelSeries = (scheduleId) =>
   request(`/api/requests/schedules/${encodeURIComponent(scheduleId)}/cancel`, { method: 'PATCH' });
