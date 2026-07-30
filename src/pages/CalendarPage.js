@@ -10,6 +10,7 @@ import {
   SLOT_MINUTES as INCREMENT,
   WORKING_DAYS,
   formatMinutes,
+  earliestStartOn,
 } from '../lib/officeHours';
 
 const CRUMBS = [
@@ -213,10 +214,9 @@ export default function CalendarPage() {
     return () => { cancelled = true; };
   }, [dateStr]);
 
-  // Only today is constrained by the clock; future dates offer the full day.
-  const now = new Date();
-  const isToday = dateStr === `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  const earliestMin = isToday ? now.getHours() * 60 + now.getMinutes() : 0;
+  // Shared with the desk page and the admin dialog, so all three agree on what
+  // is still bookable today.
+  const earliestMin = earliestStartOn(dateStr);
 
   const availableSlots = getAvailableSlots(durationMins, bookings, earliestMin, deskCount ?? 0);
 

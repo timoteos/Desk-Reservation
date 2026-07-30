@@ -53,6 +53,39 @@ export const WORKING_DAYS = [1, 2, 3, 4, 5];
 export const isWorkingDay = (dateStr) =>
   !!dateStr && WORKING_DAYS.includes(new Date(`${dateStr}T00:00:00`).getDay());
 
+const todayString = () => {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+// The earliest minute a booking may start on this date.
+//
+// The calendar had this logic inline and nothing else did, so the desk page and
+// the admin dialog would happily offer a window that had already begun and only
+// fail on submit. One definition, used by all three.
+//
+// Always the slot AFTER the current one, never the one in progress: a booking
+// starting at the exact current minute is refused by the API by the time the
+// request lands. A value past OFFICE_END means the day is over.
+export const earliestStartOn = (dateStr) => {
+  if (!dateStr) return OFFICE_START;
+  const today = todayString();
+  if (dateStr > today) return OFFICE_START;
+  if (dateStr < today) return OFFICE_END + SLOT_MINUTES;
+
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  if (nowMin < OFFICE_START) return OFFICE_START;
+  return Math.floor(nowMin / SLOT_MINUTES) * SLOT_MINUTES + SLOT_MINUTES;
+};
+
+// Whether a window can still be booked at all. Decides what the interface
+// offers; the API decides what it accepts, comparing exact timestamps rather
+// than slot boundaries.
+export const isStartBookable = (dateStr, startMin) =>
+  isWorkingDay(dateStr) && startMin >= earliestStartOn(dateStr);
+
 export const isWithinOfficeHours = (startMin, endMin) =>
   startMin >= OFFICE_START &&
   endMin <= OFFICE_END &&

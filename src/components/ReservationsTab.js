@@ -116,7 +116,7 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
               key={s.key}
               onClick={() => setScope(s.key)}
               className={`px-4 py-1.5 text-sm font-semibold transition
-                ${scope === s.key ? 'bg-mqd-btn text-white' : 'text-ink-body hover:bg-surface-page'}`}
+                ${scope === s.key ? 'bg-mqd-btn text-white' : 'text-ink-body hover:bg-surface-panel'}`}
             >
               {s.label}
             </button>
@@ -194,7 +194,7 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
                       <button
                         onClick={() => setConfirmingId(null)}
                         disabled={busyId === r.id}
-                        className="border border-surface-line hover:bg-surface-page disabled:opacity-40 text-ink-body text-xs font-semibold px-3 py-1.5 rounded transition"
+                        className="border border-surface-line hover:bg-surface-panel disabled:opacity-40 text-ink-body text-xs font-semibold px-3 py-1.5 rounded transition"
                       >
                         Keep
                       </button>
@@ -206,7 +206,7 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
                     <div className="flex gap-2 shrink-0">
                       <button
                         onClick={() => setEditing(r)}
-                        className="border border-surface-line text-ink-body hover:bg-surface-page text-xs font-semibold px-3 py-1.5 rounded transition flex items-center gap-1.5"
+                        className="border border-surface-line text-ink-body hover:bg-surface-panel text-xs font-semibold px-3 py-1.5 rounded transition flex items-center gap-1.5"
                       >
                         <Pencil className="w-3 h-3" />
                         Edit

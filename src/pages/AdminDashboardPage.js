@@ -165,7 +165,7 @@ function MainTab({ users, selectedUserId, onSelectUser }) {
         <h1 className="text-2xl font-bold text-ink ">Users</h1>
         <button
           aria-label="Add user"
-          className="w-9 h-9 rounded-lg bg-white border border-surface-line flex items-center justify-center hover:bg-surface-page transition"
+          className="w-9 h-9 rounded-lg bg-white border border-surface-line flex items-center justify-center hover:bg-surface-panel transition"
         >
           <Plus className="w-4 h-4 text-ink-body" />
         </button>
@@ -197,7 +197,7 @@ function MainTab({ users, selectedUserId, onSelectUser }) {
               <button
                 key={user.id}
                 onClick={() => onSelectUser(user)}
-                className={`bg-white rounded-lg p-3.5 text-left transition hover:bg-surface-page
+                className={`bg-white rounded-lg p-3.5 text-left transition hover:bg-surface-panel
                   ${isSelected ? 'ring-2 ring-mqd-btn' : ''}`}
               >
                 <div className="flex items-center gap-2 flex-wrap">
@@ -303,7 +303,7 @@ function RequestCard({ request, onDecide, busy }) {
         <button
           disabled={busy}
           onClick={() => onDecide(request, 'denied')}
-          className="flex-1 bg-white border border-surface-line hover:bg-surface-page disabled:opacity-40 text-ink-body text-sm font-semibold py-2 rounded transition flex items-center justify-center gap-1.5"
+          className="flex-1 bg-white border border-surface-line hover:bg-surface-panel disabled:opacity-40 text-ink-body text-sm font-semibold py-2 rounded transition flex items-center justify-center gap-1.5"
         >
           <X className="w-4 h-4" />
           Deny

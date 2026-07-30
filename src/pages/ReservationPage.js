@@ -70,7 +70,7 @@ export default function ReservationPage() {
               <button
                 onClick={() => { setType('hourly'); setCount(1); }}
                 className={`flex-1 py-3 text-sm font-semibold transition flex items-center justify-center gap-2
-                  ${type === 'hourly' ? 'bg-mqd-btn text-white' : 'bg-white text-ink-body hover:bg-surface-page'}`}
+                  ${type === 'hourly' ? 'bg-mqd-btn text-white' : 'bg-white text-ink-body hover:bg-surface-panel'}`}
               >
                 <Clock className="w-4 h-4" />
                 Hourly
@@ -78,7 +78,7 @@ export default function ReservationPage() {
               <button
                 onClick={() => { setType('full'); setCount(1); }}
                 className={`flex-1 py-3 text-sm font-semibold transition border-l border-surface-line flex items-center justify-center gap-2
-                  ${type === 'full' ? 'bg-mqd-btn text-white' : 'bg-white text-ink-body hover:bg-surface-page'}`}
+                  ${type === 'full' ? 'bg-mqd-btn text-white' : 'bg-white text-ink-body hover:bg-surface-panel'}`}
               >
                 <CalendarDays className="w-4 h-4" />
                 Full day(s)
@@ -136,7 +136,7 @@ export default function ReservationPage() {
               <button
                 onClick={() => setDeskChoice('pick')}
                 className={`flex-1 py-3 text-sm font-semibold transition flex items-center justify-center gap-2
-                  ${deskChoice === 'pick' ? 'bg-mqd-btn text-white' : 'bg-white text-ink-body hover:bg-surface-page'}`}
+                  ${deskChoice === 'pick' ? 'bg-mqd-btn text-white' : 'bg-white text-ink-body hover:bg-surface-panel'}`}
               >
                 <LayoutGrid className="w-4 h-4" />
                 I'll choose
@@ -144,7 +144,7 @@ export default function ReservationPage() {
               <button
                 onClick={() => setDeskChoice('auto')}
                 className={`flex-1 py-3 text-sm font-semibold transition border-l border-surface-line flex items-center justify-center gap-2
-                  ${deskChoice === 'auto' ? 'bg-mqd-btn text-white' : 'bg-white text-ink-body hover:bg-surface-page'}`}
+                  ${deskChoice === 'auto' ? 'bg-mqd-btn text-white' : 'bg-white text-ink-body hover:bg-surface-panel'}`}
               >
                 <Shuffle className="w-4 h-4" />
                 Assign me one

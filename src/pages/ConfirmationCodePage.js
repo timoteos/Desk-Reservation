@@ -197,7 +197,7 @@ export default function ConfirmationCodePage() {
                         <button
                           onClick={() => setConfirmingCancel(false)}
                           disabled={canceling}
-                          className="flex-1 border border-surface-line hover:bg-surface-page disabled:opacity-40 text-ink-body text-sm font-semibold py-2.5 rounded-lg transition"
+                          className="flex-1 border border-surface-line hover:bg-surface-panel disabled:opacity-40 text-ink-body text-sm font-semibold py-2.5 rounded-lg transition"
                         >
                           Keep it
                         </button>
