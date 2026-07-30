@@ -26,6 +26,9 @@ const TABS = [
   { key: 'logs', label: 'Logs', icon: ScrollText },
 ];
 
+// How often the pending queue re-checks itself while the dashboard is open.
+const REQUEST_POLL_MS = 60 * 1000;
+
 const formatMinutes = (mins) => {
   const h = Math.floor(mins / 60);
   const m = mins % 60;
@@ -338,7 +341,7 @@ function RequestCard({ request, onDecide, busy }) {
   );
 }
 
-function RequestsTab({ requests, loading, error, onDecide, busyId }) {
+function RequestsTab({ requests, loading, error, stale, onDecide, busyId }) {
   if (loading) {
     return (
       <div className="bg-surface-panel border border-surface-line rounded-2xl p-6 min-h-[300px] flex items-center justify-center">
@@ -373,6 +376,15 @@ function RequestsTab({ requests, loading, error, onDecide, busyId }) {
       <h1 className="text-2xl font-bold text-ink mb-5">
         Pending requests
       </h1>
+
+      {/* A background refresh failed, so this list is the last known state
+          rather than the current one. Said quietly, because nobody asked for
+          the refresh and nothing they did went wrong. */}
+      {stale && (
+        <p className="text-ink-muted text-sm mb-4">
+          Couldn't refresh just now — showing the last known state.
+        </p>
+      )}
       <div className="flex flex-col gap-3">
         {requests.map((request) => (
           <RequestCard
@@ -397,6 +409,7 @@ export default function AdminDashboardPage() {
   const [requestsLoading, setRequestsLoading] = useState(true);
   const [requestsError, setRequestsError] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [refreshFailed, setRefreshFailed] = useState(false);
   const [booking, setBooking] = useState(false);
 
   // Bumped whenever an admin action changes reservation data. Tabs treat it as
@@ -417,15 +430,64 @@ export default function AdminDashboardPage() {
 
   // Loaded on mount rather than on tab switch, so the badge count is visible
   // without the admin having to open the tab first.
-  const loadRequests = useCallback(() => {
-    setRequestsError(null);
+  // `background` marks a refresh nobody asked for. A failed poll must not throw
+  // away what is on screen: before polling existed this error only appeared when
+  // an admin had just done something and was expecting feedback, and one dropped
+  // request would now blank the queue they were reading until the next tick.
+  //
+  // So a background failure keeps the last good data and says so quietly, while a
+  // load the admin triggered still reports properly. Either way the next
+  // successful fetch clears it.
+  const loadRequests = useCallback(({ background = false } = {}) => {
+    if (!background) setRequestsError(null);
     return getRequests()
-      .then(setRequests)
-      .catch((err) => setRequestsError(err.message))
+      .then((data) => {
+        setRequests(data);
+        setRequestsError(null);
+        setRefreshFailed(false);
+      })
+      .catch((err) => {
+        if (background) setRefreshFailed(true);
+        else setRequestsError(err.message);
+      })
       .finally(() => setRequestsLoading(false));
   }, []);
 
   useEffect(() => { loadRequests(); }, [loadRequests]);
+
+  // Requests arrive from other people, so the queue has to notice them without
+  // being asked. A pending request expires — 24 hours, or two hours before the
+  // booking starts, whichever comes first — so one nobody sees dies unreviewed,
+  // and unlike two admins racing a decision there is no error to catch it.
+  //
+  // Polling rather than a live connection: one poll is two selects and about ten
+  // milliseconds, against a persistent socket for whoever inherits this to
+  // operate. Sixty seconds is well inside the shortest review window.
+  //
+  // It also keeps expiry moving. The sweep only runs when an endpoint is hit, so
+  // without this a badge could sit there counting requests that had already
+  // lapsed.
+  useEffect(() => {
+    const poll = () => {
+      // A dashboard left open overnight should not keep asking. Hidden tabs
+      // resume on the visibility change below.
+      if (document.hidden) return;
+      loadRequests({ background: true });
+    };
+
+    const id = setInterval(poll, REQUEST_POLL_MS);
+
+    // Coming back to the tab should not wait out the rest of the interval.
+    const onVisible = () => { if (!document.hidden) loadRequests({ background: true }); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [loadRequests]);
 
   const handleDecide = async (request, decision) => {
     const key = `${request.kind}-${request.id}`;
@@ -503,6 +565,7 @@ export default function AdminDashboardPage() {
             requests={requests}
             loading={requestsLoading}
             error={requestsError}
+            stale={refreshFailed}
             onDecide={handleDecide}
             busyId={busyId}
           />
