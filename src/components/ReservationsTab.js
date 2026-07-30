@@ -260,6 +260,26 @@ function SeriesCard({
   );
 }
 
+
+// A labelled group with its own count. Empty sections stay on screen and say so,
+// rather than vanishing — an admin should be able to tell "none of these" from
+// "this list does not exist here".
+function Section({ title, count, empty, children }) {
+  return (
+    <div>
+      <div className="flex items-baseline gap-2 mb-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{title}</h2>
+        <span className="text-xs text-ink-muted tabular-nums">{count}</span>
+      </div>
+      {count === 0 ? (
+        <p className="text-ink-muted text-sm">{empty}</p>
+      ) : (
+        <div className="flex flex-col gap-2">{children}</div>
+      )}
+    </div>
+  );
+}
+
 // dataVersion changes when an admin action elsewhere on the dashboard has
 // altered reservations; onChanged reports this tab's own overrides back so the
 // rest of the dashboard can do the same.
@@ -349,7 +369,13 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
       )
     : reservations;
 
+  // Split rather than filtered. A toggle would show one kind at a time and make
+  // the admin remember which mode they were in; two sections keep both visible
+  // and separate at once, with no control to discover and no second filter to
+  // cross with the scope.
   const groups = groupByschedule(matching);
+  const seriesGroups = groups.filter((g) => g.series);
+  const singleGroups = groups.filter((g) => !g.series);
 
   return (
     <div className="bg-surface-panel border border-surface-line rounded-2xl p-6">
@@ -405,9 +431,16 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-2 max-h-[28rem] overflow-y-auto pr-1">
-          {groups.map((g) =>
-            g.series ? (
+        <div className="flex flex-col gap-5 max-h-[28rem] overflow-y-auto pr-1">
+          {/* Recurring first: it is the shorter list and the one that holds a
+              desk for weeks, so it is what an admin reviewing commitments wants
+              at the top. One-off bookings are the churn underneath. */}
+          <Section
+            title="Recurring schedules"
+            count={seriesGroups.length}
+            empty="No recurring schedules in this view."
+          >
+            {seriesGroups.map((g) => (
               <SeriesCard
                 key={g.key}
                 group={g}
@@ -420,7 +453,15 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
                 onCancelSeries={handleCancelSeries}
                 onEdit={setEditing}
               />
-            ) : (
+            ))}
+          </Section>
+
+          <Section
+            title="One-off bookings"
+            count={singleGroups.length}
+            empty="No one-off bookings in this view."
+          >
+            {singleGroups.map((g) => (
               <BookingCard
                 key={g.key}
                 r={g.lead}
@@ -430,8 +471,8 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
                 onCancel={handleCancel}
                 onEdit={setEditing}
               />
-            )
-          )}
+            ))}
+          </Section>
         </div>
       )}
 
