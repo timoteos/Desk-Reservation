@@ -58,6 +58,10 @@ export const adminCancelReservation = (id) =>
 // Standing arrangements rather than bookings — who holds a desk, and until when.
 export const getSchedules = () => request('/api/schedules');
 
+// The days a schedule still has coming, so one can be freed without ending it.
+export const getScheduleDays = (seriesId) =>
+  request(`/api/schedules/${encodeURIComponent(seriesId)}/days`);
+
 // Changes a live schedule. Send only what differs; days already served are not
 // affected.
 export const adminEditSchedule = (seriesId, changes) =>

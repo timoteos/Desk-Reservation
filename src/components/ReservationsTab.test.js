@@ -1,10 +1,10 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import ReservationsTab from './ReservationsTab';
 import * as api from '../api/client';
 
 jest.mock('../api/client');
 
-const occurrence = (id, date) => ({
+const scheduleDay = (id, date) => ({
   id: String(id),
   date,
   startMin: 450,
@@ -20,25 +20,27 @@ const occurrence = (id, date) => ({
   deskId: 1,
 });
 
+const ONE_OFF = {
+  id: '99',
+  date: '2027-08-06',
+  startMin: 540,
+  endMin: 720,
+  status: 'approved',
+  confirmationCode: 'ONEOFF01',
+  bookingSource: 'user',
+  scheduleId: null,
+  seriesId: null,
+  user: 'Penny Kabua',
+  userId: 5,
+  deskNumber: 7,
+  deskId: 7,
+};
+
 const ROWS = [
-  occurrence(1, '2027-08-03'),
-  occurrence(2, '2027-08-04'),
-  occurrence(3, '2027-08-05'),
-  {
-    id: '99',
-    date: '2027-08-06',
-    startMin: 540,
-    endMin: 720,
-    status: 'approved',
-    confirmationCode: 'ONEOFF01',
-    bookingSource: 'user',
-    scheduleId: null,
-    seriesId: null,
-    user: 'Penny Kabua',
-    userId: 5,
-    deskNumber: 7,
-    deskId: 7,
-  },
+  scheduleDay(1, '2027-08-03'),
+  scheduleDay(2, '2027-08-04'),
+  scheduleDay(3, '2027-08-05'),
+  ONE_OFF,
 ];
 
 beforeEach(() => {
@@ -46,45 +48,55 @@ beforeEach(() => {
   api.getAllReservations.mockResolvedValue(ROWS);
 });
 
-test("a schedule's bookings fold into one row rather than three", async () => {
+test('schedule days are not listed here at all', async () => {
   render(<ReservationsTab />);
 
-  await screen.findByText('Timoteo Sumalinog');
-  // One row for the schedule, not one per occurrence.
-  expect(screen.getAllByText('Timoteo Sumalinog')).toHaveLength(1);
-  expect(screen.getByText(/Show all 3 bookings/)).toBeInTheDocument();
-  expect(screen.getByText('Penny Kabua')).toBeInTheDocument();
+  await screen.findByText('Penny Kabua');
+  // Not folded, not collapsed — absent. The arrangement lives on the Schedules
+  // tab and this tab does not restate it.
+  expect(screen.queryByText('Timoteo Sumalinog')).not.toBeInTheDocument();
+  expect(screen.queryByText(/Show all/)).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /manage this schedule/i })).not.toBeInTheDocument();
 });
 
-test('the folded row no longer manages the schedule', async () => {
+test('the count says one-off, so it is not read as office usage', async () => {
   render(<ReservationsTab />);
-  await screen.findByText('Timoteo Sumalinog');
 
-  // All of this belongs to the Schedules tab. Having it here meant two front
-  // doors onto ending somebody's arrangement.
-  expect(screen.queryByRole('button', { name: /cancel series/i })).not.toBeInTheDocument();
-  expect(screen.queryByText(/Monday · 7:30 AM/)).not.toBeInTheDocument();
-  expect(api.adminCancelSeries).not.toHaveBeenCalled();
+  await screen.findByText('Penny Kabua');
+  // Three of the four rows were schedule days. A bare "1 booking" would say the
+  // office is nearly empty.
+  expect(screen.getByText(/one-off booking/)).toBeInTheDocument();
+  expect(screen.getByText(/Recurring schedules\s+are on the Schedules tab/)).toBeInTheDocument();
 });
 
-test('it points at the Schedules tab instead', async () => {
-  const onManageSchedules = jest.fn();
-  render(<ReservationsTab onManageSchedules={onManageSchedules} />);
-  await screen.findByText('Timoteo Sumalinog');
-
-  fireEvent.click(screen.getByRole('button', { name: /manage this schedule/i }));
-  expect(onManageSchedules).toHaveBeenCalled();
-});
-
-test('expanding shows each day as an ordinary booking', async () => {
+test('an empty result explains where the schedules went', async () => {
+  api.getAllReservations.mockResolvedValue([scheduleDay(1, '2027-08-03')]);
   render(<ReservationsTab />);
-  await screen.findByText('Timoteo Sumalinog');
 
-  fireEvent.click(screen.getByText(/Show all 3 bookings/));
+  await screen.findByText(/No upcoming one-off bookings/);
+  expect(
+    screen.getByText(/Recurring schedules and the days they hold are on the Schedules tab/)
+  ).toBeInTheDocument();
+});
 
-  // Each occurrence keeps its own cancel — releasing one Tuesday is a booking
-  // action and stays here, which is why the grouping is display only.
-  await waitFor(() =>
-    expect(screen.getAllByRole('button', { name: /^cancel$/i }).length).toBeGreaterThanOrEqual(3)
-  );
+test('a one-off booking can still be cancelled and edited', async () => {
+  api.adminCancelReservation.mockResolvedValue({ status: 'canceled' });
+  render(<ReservationsTab />);
+
+  await screen.findByText('Penny Kabua');
+  fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^confirm$/i }));
+
+  await waitFor(() => expect(api.adminCancelReservation).toHaveBeenCalledWith('99'));
+});
+
+test('searching never turns up a schedule day', async () => {
+  render(<ReservationsTab />);
+  await screen.findByText('Penny Kabua');
+
+  fireEvent.change(screen.getByPlaceholderText(/search/i), {
+    target: { value: 'Timoteo' },
+  });
+
+  expect(await screen.findByText(/No one-off booking matches that search/)).toBeInTheDocument();
 });

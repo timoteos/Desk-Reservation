@@ -38,49 +38,9 @@ const formatDate = (dateStr) => {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-const shortDay = (dateStr) =>
-  new Date(`${dateStr}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
 // Everything listed is approved, so the only thing that stops an admin acting
 // on a booking is it having already finished.
 const isLive = (r) => new Date(`${r.date}T00:00:00`).setMinutes(r.endMin) > Date.now();
-
-// One entry per schedule rather than one per generated booking.
-//
-// A weekly schedule materialises as a real row for each occurrence, because the
-// exclusion constraint can only compare rows — but that meant a single intern's
-// schedule filled the tab. In testing, 63 of 64 upcoming rows belonged to five
-// patterns. Grouping is presentational only; the rows underneath are untouched,
-// and each is still an ordinary booking that can be cancelled or moved on its own.
-const groupByschedule = (rows) => {
-  const groups = [];
-  const bySchedule = new Map();
-
-  rows.forEach((r) => {
-    if (!r.seriesId) {
-      groups.push({ key: `one-${r.id}`, series: false, lead: r, items: [r] });
-      return;
-    }
-    let group = bySchedule.get(r.seriesId);
-    if (!group) {
-      group = { key: `series-${r.seriesId}`, series: true, lead: r, items: [] };
-      bySchedule.set(r.seriesId, group);
-      groups.push(group);
-    }
-    group.items.push(r);
-  });
-
-  groups.forEach((g) => {
-    if (!g.series) return;
-    g.items.sort((a, b) => a.date.localeCompare(b.date));
-    g.lead = g.items[0];
-    g.first = g.items[0].date;
-    g.last = g.items[g.items.length - 1].date;
-  });
-
-  return groups;
-};
-
 
 // One booking. Rendered alone for a one-off, and once per occurrence inside an
 // expanded series, where `compact` drops the chip the group header already shows.
@@ -150,97 +110,7 @@ function BookingCard({ r, confirmingId, setConfirmingId, busyId, onCancel, onEdi
 }
 
 
-// A schedule's bookings, folded into one row so a single pattern cannot bury the
-// list — 63 of 64 upcoming rows belonged to five schedules when this was written.
-//
-// That is all this does now. It used to restate the pattern, the span and the
-// desk, and carry Cancel series and Edit — which was the Schedules tab, rendered
-// a second time inside this one, with a second front door onto ending somebody's
-// arrangement. The arrangement is managed in one place; this tab is for the
-// bookings it produced, and for who is at which desk on a given day.
-function SeriesGroup({
-  group, expanded, onToggle, confirmingId, setConfirmingId,
-  busyId, onCancel, onEdit, onManage,
-}) {
-  const { lead, items, first, last } = group;
-
-  return (
-    <div className="bg-white rounded-lg p-3.5">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-semibold text-ink">{lead.user}</p>
-            <span className={`text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded ${SOURCE_STYLES.recurring}`}>
-              {SOURCE_LABELS.recurring}
-            </span>
-          </div>
-
-          <p className="text-ink-muted text-sm mt-0.5">
-            Desk# {lead.deskNumber} &middot; {items.length} booking
-            {items.length === 1 ? '' : 's'} &middot; {shortDay(first)} &ndash; {shortDay(last)}
-          </p>
-
-          <div className="flex items-center gap-3 mt-1.5">
-            <button
-              onClick={onToggle}
-              className="text-mqd-700 text-xs font-semibold hover:underline"
-            >
-              {expanded ? 'Hide bookings' : `Show all ${items.length} bookings`}
-            </button>
-            <button
-              onClick={onManage}
-              className="text-ink-muted hover:text-ink-body text-xs font-semibold transition"
-            >
-              Manage this schedule &rarr;
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {expanded && (
-        <div className="flex flex-col gap-2 mt-3 pt-3 border-t border-surface-line">
-          {items.map((r) => (
-            <BookingCard
-              key={r.id}
-              r={r}
-              compact
-              confirmingId={confirmingId}
-              setConfirmingId={setConfirmingId}
-              busyId={busyId}
-              onCancel={onCancel}
-              onEdit={onEdit}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-// A labelled group with its own count. Empty sections stay on screen and say so,
-// rather than vanishing — an admin should be able to tell "none of these" from
-// "this list does not exist here".
-function Section({ title, count, empty, children }) {
-  return (
-    <div>
-      <div className="flex items-baseline gap-2 mb-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{title}</h2>
-        <span className="text-xs text-ink-muted tabular-nums">{count}</span>
-      </div>
-      {count === 0 ? (
-        <p className="text-ink-muted text-sm">{empty}</p>
-      ) : (
-        <div className="flex flex-col gap-2">{children}</div>
-      )}
-    </div>
-  );
-}
-
-// dataVersion changes when an admin action elsewhere on the dashboard has
-// altered reservations; onChanged reports this tab's own overrides back so the
-// rest of the dashboard can do the same.
-export default function ReservationsTab({ dataVersion = 0, onChanged, onManageSchedules }) {
+export default function ReservationsTab({ dataVersion = 0, onChanged }) {
   const [scope, setScope] = useState('upcoming');
   const [reservations, setReservations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -249,7 +119,6 @@ export default function ReservationsTab({ dataVersion = 0, onChanged, onManageSc
   const [confirmingId, setConfirmingId] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [editing, setEditing] = useState(null);
-  const [expandedSeries, setExpandedSeries] = useState(null);
   // Nobody emails the holder when their booking moves, so the admin who did it
   // is the only person who knows. Say what changed rather than silently
   // redrawing the row.
@@ -292,8 +161,7 @@ export default function ReservationsTab({ dataVersion = 0, onChanged, onManageSc
   };
 
   // Matches name, desk or code, so an admin can search by whatever the person
-  // on the phone happens to know. Applied before grouping, so searching a single
-  // occurrence's code still finds it — the group then shows just that booking.
+  // on the phone happens to know.
   const term = filter.trim().toLowerCase();
   const matching = term
     ? reservations.filter((r) =>
@@ -303,18 +171,26 @@ export default function ReservationsTab({ dataVersion = 0, onChanged, onManageSc
       )
     : reservations;
 
-  // Split rather than filtered. A toggle would show one kind at a time and make
-  // the admin remember which mode they were in; two sections keep both visible
-  // and separate at once, with no control to discover and no second filter to
-  // cross with the scope.
-  const groups = groupByschedule(matching);
-  const seriesGroups = groups.filter((g) => g.series);
-  const singleGroups = groups.filter((g) => !g.series);
+  // Schedule occurrences do not belong here.
+  //
+  // They are real bookings holding real desks, which is why they were kept for a
+  // while — folded into one row per schedule so a single intern's pattern could
+  // not bury everything else. But an arrangement is managed on the Schedules tab,
+  // and having it in two places meant two front doors onto ending one, and a row
+  // here whose only remaining action was a link to the other tab. A row that just
+  // points somewhere else is a signpost, not a feature.
+  //
+  // So this tab is one-off bookings, the Schedules tab is schedules, and neither
+  // restates the other. The counts below say "one-off" for the same reason: with
+  // schedule days excluded, this total is not office usage and should not read as
+  // if it were.
+  const oneOff = matching.filter((r) => !r.seriesId);
+  const oneOffTotal = reservations.filter((r) => !r.seriesId).length;
 
   return (
     <div className="bg-surface-panel border border-surface-line rounded-2xl p-6">
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-        <h1 className="text-2xl font-bold text-ink ">Reservations</h1>
+        <h1 className="text-2xl font-bold text-ink">One-off bookings</h1>
         <div className="flex rounded-lg border border-surface-line overflow-hidden bg-white">
           {SCOPES.map((s) => (
             <button
@@ -357,55 +233,31 @@ export default function ReservationsTab({ dataVersion = 0, onChanged, onManageSc
 
       {loading ? (
         <p className="text-ink-muted text-sm text-center py-10">Loading reservations…</p>
-      ) : groups.length === 0 ? (
+      ) : oneOff.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-10 text-center">
           <CalendarX className="w-9 h-9 text-ink-muted" />
           <p className="text-ink-body text-sm">
-            {term ? 'Nothing matches that search.' : `No ${scope === 'all' ? '' : scope} approved reservations.`}
+            {term
+              ? 'No one-off booking matches that search.'
+              : `No ${scope === 'all' ? '' : scope} one-off bookings.`}
+          </p>
+          <p className="text-ink-muted text-xs max-w-sm">
+            Recurring schedules and the days they hold are on the Schedules tab.
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-5 max-h-[28rem] overflow-y-auto pr-1">
-          {/* Schedule bookings first: it is the shorter list, being folded, and
-              keeps one pattern from burying the one-off churn underneath. */}
-          <Section
-            title="From a schedule"
-            count={seriesGroups.length}
-            empty="No schedule bookings in this view."
-          >
-            {seriesGroups.map((g) => (
-              <SeriesGroup
-                key={g.key}
-                group={g}
-                expanded={expandedSeries === g.key}
-                onToggle={() => setExpandedSeries(expandedSeries === g.key ? null : g.key)}
-                confirmingId={confirmingId}
-                setConfirmingId={setConfirmingId}
-                busyId={busyId}
-                onCancel={handleCancel}
-                onEdit={setEditing}
-                onManage={onManageSchedules}
-              />
-            ))}
-          </Section>
-
-          <Section
-            title="One-off bookings"
-            count={singleGroups.length}
-            empty="No one-off bookings in this view."
-          >
-            {singleGroups.map((g) => (
-              <BookingCard
-                key={g.key}
-                r={g.lead}
-                confirmingId={confirmingId}
-                setConfirmingId={setConfirmingId}
-                busyId={busyId}
-                onCancel={handleCancel}
-                onEdit={setEditing}
-              />
-            ))}
-          </Section>
+        <div className="flex flex-col gap-2 max-h-[28rem] overflow-y-auto pr-1">
+          {oneOff.map((r) => (
+            <BookingCard
+              key={r.id}
+              r={r}
+              confirmingId={confirmingId}
+              setConfirmingId={setConfirmingId}
+              busyId={busyId}
+              onCancel={handleCancel}
+              onEdit={setEditing}
+            />
+          ))}
         </div>
       )}
 
@@ -417,13 +269,15 @@ export default function ReservationsTab({ dataVersion = 0, onChanged, onManageSc
         />
       )}
 
-      {/* Both numbers, because a recurring pattern is one entry standing for many
-          bookings and either figure alone would mislead. */}
+      {/* "one-off" is load-bearing, not decoration. Schedule days are excluded,
+          and 63 of 64 upcoming rows once belonged to five schedules — a count
+          reading "12 bookings" would badly understate the office if anybody took
+          it for utilisation. */}
       <p className="text-ink-muted text-xs mt-4">
-        Showing {groups.length} {groups.length === 1 ? 'entry' : 'entries'} covering{' '}
-        {matching.length} {scope === 'all' ? '' : `${scope} `}
-        booking{matching.length === 1 ? '' : 's'}
-        {matching.length !== reservations.length && ` of ${reservations.length}`}.
+        Showing {oneOff.length} {scope === 'all' ? '' : `${scope} `}
+        one-off booking{oneOff.length === 1 ? '' : 's'}
+        {oneOff.length !== oneOffTotal && ` of ${oneOffTotal}`}. Recurring schedules
+        are on the Schedules tab.
       </p>
     </div>
   );

@@ -544,11 +544,7 @@ export default function AdminDashboardPage() {
         </div>
 
         {activeTab === 'reservations' && (
-          <ReservationsTab
-            dataVersion={dataVersion}
-            onChanged={dataChanged}
-            onManageSchedules={() => setActiveTab('schedules')}
-          />
+          <ReservationsTab dataVersion={dataVersion} onChanged={dataChanged} />
         )}
 
         {activeTab === 'users' && (

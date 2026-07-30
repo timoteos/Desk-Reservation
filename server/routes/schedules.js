@@ -20,6 +20,9 @@ const DAY_LABELS = {
   4: 'Thursday', 5: 'Friday', 6: 'Saturday',
 };
 
+const minutesOfDay = (ts) =>
+  new Date(ts).getHours() * 60 + new Date(ts).getMinutes();
+
 const minutesFrom = (time) => {
   const [h, m] = time.split(':').map(Number);
   return h * 60 + m;
@@ -153,6 +156,44 @@ router.get('/', async (req, res, next) => {
   }
 });
 
+
+// GET /api/schedules/:seriesId/days
+//
+// The occurrences a schedule still has coming, so an admin can free a single one
+// — "he is on leave next Tuesday" — without ending the arrangement or editing
+// its pattern.
+//
+// Loaded per schedule rather than folded into the list, because the list is a
+// dozen arrangements and this is a dozen days each. Past days are left out: they
+// happened, and cancelling them would rewrite what happened.
+router.get('/:seriesId/days', async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      `SELECT r.reservation_id, r.starts_at, r.ends_at, r.status, d.desk_number
+         FROM reservations r
+         JOIN recurring_schedules s ON s.schedule_id = r.schedule_id
+         LEFT JOIN desks d ON d.desk_id = r.desk_id
+        WHERE s.series_id = $1
+          AND r.status IN ('pending', 'approved')
+          AND r.ends_at > now()
+        ORDER BY r.starts_at`,
+      [req.params.seriesId]
+    );
+
+    res.json(
+      rows.map((r) => ({
+        id: String(r.reservation_id),
+        date: toDateString(r.starts_at),
+        startMin: minutesOfDay(r.starts_at),
+        endMin: minutesOfDay(r.ends_at),
+        status: r.status,
+        deskNumber: r.desk_number,
+      }))
+    );
+  } catch (err) {
+    next(err);
+  }
+});
 
 // PATCH /api/schedules/:seriesId
 // { deskId?, days?, activeUntil? }
