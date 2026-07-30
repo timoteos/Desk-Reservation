@@ -3,6 +3,7 @@ import { Plus, X, Check, Search, CalendarDays, Users, ScrollText, Inbox, Calenda
 import AdminBookingModal from '../components/AdminBookingModal';
 import ReservationsTab from '../components/ReservationsTab';
 import LogsTab from '../components/LogsTab';
+import SchedulesTab from '../components/SchedulesTab';
 import {
   getUsers,
   getUserReservations,
@@ -13,6 +14,7 @@ import {
 const TABS = [
   { key: 'reservations', label: 'Reservations', icon: CalendarDays },
   { key: 'users', label: 'Users', icon: Users },
+  { key: 'schedules', label: 'Schedules', icon: CalendarClock },
   { key: 'logs', label: 'Logs', icon: ScrollText },
   { key: 'requests', label: 'Requests', icon: Inbox },
 ];
@@ -437,7 +439,7 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="flex-1 flex flex-col items-center px-4 md:px-8 py-8 bg-white">
-      <div className="w-full max-w-2xl">
+      <div className="w-full max-w-3xl">
         {/* Tabs */}
         <div className="flex items-center gap-2 mb-4 flex-wrap">
           {TABS.map((tab) => {
@@ -447,7 +449,7 @@ export default function AdminDashboardPage() {
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-t-lg text-sm font-semibold transition
+                className={`flex items-center gap-2 px-3 py-2 rounded-t-lg text-sm font-semibold transition
                   ${isActive
                     ? 'bg-surface-line text-ink'
                     : 'bg-surface-panel text-ink-muted hover:bg-surface-panel'}`}
@@ -484,6 +486,9 @@ export default function AdminDashboardPage() {
           ) : (
             <MainTab users={users} selectedUserId={selectedUser?.id} onSelectUser={setSelectedUser} />
           )
+        )}
+        {activeTab === 'schedules' && (
+          <SchedulesTab dataVersion={dataVersion} onChanged={dataChanged} />
         )}
         {activeTab === 'logs' && <LogsTab dataVersion={dataVersion} />}
         {activeTab === 'requests' && (

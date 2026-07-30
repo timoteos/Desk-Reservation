@@ -9,6 +9,7 @@ const desksRouter = require('./routes/desks');
 const reservationsRouter = require('./routes/reservations');
 const recurringSchedulesRouter = require('./routes/recurringSchedules');
 const requestsRouter = require('./routes/requests');
+const schedulesRouter = require('./routes/schedules');
 const logsRouter = require('./routes/logs');
 const authRouter = require('./routes/auth');
 const { readToken } = require('./lib/auth');
@@ -27,6 +28,7 @@ app.use('/api/desks', desksRouter);
 app.use('/api/reservations', reservationsRouter);
 app.use('/api/recurring-schedules', recurringSchedulesRouter);
 app.use('/api/requests', requestsRouter);
+app.use('/api/schedules', schedulesRouter);
 app.use('/api/logs', logsRouter);
 
 app.get('/api/health', async (req, res) => {
