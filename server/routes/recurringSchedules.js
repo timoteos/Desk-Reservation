@@ -7,23 +7,50 @@ const { officeHoursError } = require('../lib/officeHours');
 
 const router = express.Router();
 
-// How far ahead a weekly pattern materialises. Occurrences have to exist as
-// real rows: the exclusion constraint can only see rows, so a schedule that
-// computed its occurrences on the fly would get no double-booking protection.
-const HORIZON_DAYS = 90;
+// Occurrences have to exist as real rows: the exclusion constraint can only see
+// rows, so a schedule that computed its occurrences on the fly would get no
+// double-booking protection at all.
+//
+// How far ahead they materialise now comes from the schedule's own end date.
+// active_from and active_until have been in the schema since the ERD and were
+// ignored in favour of a flat 90 days, which meant a six-week contract was
+// granted about 34 bookings nobody could reclaim — one desk of twelve, held for
+// weeks past the point anyone would use it.
+//
+// Open-ended schedules still need a limit, since rows cannot be generated
+// forever. 90 days remains that limit, and the response says so rather than
+// leaving the holder to discover their bookings stop.
+const DEFAULT_HORIZON_DAYS = 90;
+
+// A hard ceiling, so a typo in the end date cannot lock desks into 2099.
+const MAX_HORIZON_DAYS = 365;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const parseDay = (value) => {
+  if (!value) return null;
+  const d = new Date(`${value}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+const startOfToday = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
 
 const DAY_NUMBERS = { mon: 1, tue: 2, wed: 3, thu: 4, fri: 5 };
 
 const minutesToTime = (mins) =>
   `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
 
-// Every date within the horizon falling on one of the requested weekdays.
-function occurrencesFor(dayNumbers, horizonDays) {
+// Every date between from and to inclusive that falls on one of the weekdays.
+function occurrencesFor(dayNumbers, from, to) {
   const dates = [];
-  const cursor = new Date();
+  const cursor = new Date(from);
   cursor.setHours(0, 0, 0, 0);
 
-  for (let i = 0; i < horizonDays; i += 1) {
+  while (cursor <= to) {
     if (dayNumbers.includes(cursor.getDay())) {
       dates.push(new Date(cursor));
     }
@@ -39,11 +66,11 @@ const atTime = (date, minutes) => {
 };
 
 // POST /api/recurring-schedules
-// { email, days: { mon: { startMin, endMin }, ... } }
+// { email, days: { mon: { startMin, endMin }, ... }, activeFrom?, activeUntil? }
 router.post('/', async (req, res, next) => {
   const client = await pool.connect();
   try {
-    const { email, days } = req.body;
+    const { email, days, activeFrom, activeUntil } = req.body;
 
     if (!email || !days || Object.keys(days).length === 0) {
       return res.status(400).json({ message: 'email and at least one day are required' });
@@ -53,6 +80,30 @@ router.post('/', async (req, res, next) => {
     if (invalid.length > 0) {
       return res.status(400).json({ message: `Unknown day: ${invalid.join(', ')}` });
     }
+
+    // The window the pattern runs over. Never earlier than today, since a
+    // schedule cannot generate bookings into the past.
+    const today = startOfToday();
+    const requestedFrom = parseDay(activeFrom);
+    if (activeFrom && !requestedFrom) {
+      return res.status(400).json({ message: 'Start date is not a valid date.' });
+    }
+    const from = requestedFrom && requestedFrom > today ? requestedFrom : today;
+
+    const requestedUntil = parseDay(activeUntil);
+    if (activeUntil && !requestedUntil) {
+      return res.status(400).json({ message: 'End date is not a valid date.' });
+    }
+    if (requestedUntil && requestedUntil < from) {
+      return res.status(400).json({ message: 'The end date must be on or after the start date.' });
+    }
+
+    const ceiling = new Date(from.getTime() + (MAX_HORIZON_DAYS - 1) * DAY_MS);
+    const openEnded = !requestedUntil;
+    const to = openEnded
+      ? new Date(from.getTime() + (DEFAULT_HORIZON_DAYS - 1) * DAY_MS)
+      : new Date(Math.min(requestedUntil.getTime(), ceiling.getTime()));
+    const cappedAtCeiling = !!requestedUntil && requestedUntil > ceiling;
 
     const userResult = await client.query(
       'SELECT user_id FROM users WHERE lower(email) = lower($1) AND is_active',
@@ -74,7 +125,7 @@ router.post('/', async (req, res, next) => {
       if (hoursProblem) {
         return res.status(400).json({ message: `${hoursProblem} (${dayKey})` });
       }
-      for (const date of occurrencesFor([dayNumber], HORIZON_DAYS)) {
+      for (const date of occurrencesFor([dayNumber], from, to)) {
         const startsAt = atTime(date, times.startMin);
         // Skip an occurrence whose time has already passed today — otherwise a
         // Monday pattern submitted on Monday afternoon generates a slot for
@@ -94,7 +145,9 @@ router.post('/', async (req, res, next) => {
 
     if (slots.length === 0) {
       return res.status(400).json({
-        message: 'Every occurrence in that pattern has already passed. Try starting next week.',
+        message: openEnded
+          ? 'Every occurrence in that pattern has already passed. Try starting next week.'
+          : 'That pattern produces no bookings between those dates. Check the days and the date range.',
       });
     }
 
@@ -144,8 +197,9 @@ router.post('/', async (req, res, next) => {
     for (const [dayKey, times] of Object.entries(days)) {
       const { rows } = await client.query(
         `INSERT INTO recurring_schedules
-           (user_id, desk_id, day_of_week, start_time, end_time, status, expires_at)
-         VALUES ($1, $2, $3, $4, $5, 'pending', $6)
+           (user_id, desk_id, day_of_week, start_time, end_time, status, expires_at,
+            active_from, active_until)
+         VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, $8)
          RETURNING schedule_id`,
         [
           userId,
@@ -154,6 +208,10 @@ router.post('/', async (req, res, next) => {
           minutesToTime(times.startMin),
           minutesToTime(times.endMin),
           expiresAt,
+          toDateString(from),
+          // Null when open-ended, so the row records that no end was chosen
+          // rather than pretending the rolling horizon was a decision.
+          openEnded ? null : toDateString(to),
         ]
       );
       scheduleIds[dayKey] = rows[0].schedule_id;
@@ -209,7 +267,13 @@ router.post('/', async (req, res, next) => {
       status: 'pending',
       expiresAt,
       deskNumber: best.desk_number,
-      horizonDays: HORIZON_DAYS,
+      activeFrom: toDateString(from),
+      activeUntil: openEnded ? null : toDateString(to),
+      openEnded,
+      // Stated so an open-ended holder knows the bookings stop rather than
+      // finding out by turning up to nothing.
+      generatedThrough: toDateString(to),
+      cappedAtCeiling,
       created: created.length,
       skipped: skipped.map((s) => ({
         date: toDateString(s.startsAt),

@@ -24,6 +24,19 @@ const DAYS = [
   { key: 'fri', label: 'Friday' },
 ];
 
+const formatDay = (dateStr) =>
+  dateStr
+    ? new Date(`${dateStr}T00:00:00`).toLocaleDateString('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+      })
+    : '';
+
+const todayValue = () => {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
 const OFFICE_START = toTimeValue(OFFICE_START_MIN);
 const OFFICE_END = toTimeValue(OFFICE_END_MIN);
 
@@ -32,6 +45,10 @@ export default function RecurringSchedulePage() {
   // Map of dayKey -> { start, end } for every day the user has selected
   const [schedule, setSchedule] = useState({});
   const [email, setEmail] = useState('');
+  // A contract or project has an end. Without one the pattern runs to a rolling
+  // 90-day limit, which held a desk long past the point anyone would use it.
+  const [activeFrom, setActiveFrom] = useState(todayValue());
+  const [activeUntil, setActiveUntil] = useState('');
   const [result, setResult] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -80,7 +97,14 @@ export default function RecurringSchedulePage() {
           { startMin: toMinutes(schedule[key].start), endMin: toMinutes(schedule[key].end) },
         ])
       );
-      setResult(await createRecurringSchedule({ email: email.trim(), days }));
+      setResult(await createRecurringSchedule({
+        email: email.trim(),
+        days,
+        activeFrom,
+        // Omitted rather than empty, so the server records that no end was
+        // chosen instead of treating the fallback as a decision.
+        ...(activeUntil ? { activeUntil } : {}),
+      }));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -115,9 +139,21 @@ export default function RecurringSchedulePage() {
               <p className="text-mqd-title font-semibold">Request submitted</p>
               <p className="text-ink-body text-sm">
                 Desk# {result.deskNumber} &middot; {result.created} booking
-                {result.created === 1 ? '' : 's'} over the next {result.horizonDays} days,
+                {result.created === 1 ? '' : 's'} through {formatDay(result.generatedThrough)},
                 pending approval
               </p>
+              {result.openEnded && (
+                <p className="text-ink-muted text-xs max-w-sm">
+                  No end date was set, so bookings run to {formatDay(result.generatedThrough)}
+                  {' '}and stop there. Ask an administrator to extend them if you need longer.
+                </p>
+              )}
+              {result.cappedAtCeiling && (
+                <p className="text-ink-muted text-xs max-w-sm">
+                  That end date was further out than a schedule can reach, so bookings run
+                  to {formatDay(result.generatedThrough)}.
+                </p>
+              )}
               <div className="text-ink-muted text-sm w-full space-y-1 mt-2">
                 {selectedDays.map((d) => (
                   <p key={d.key}>
@@ -142,6 +178,40 @@ export default function RecurringSchedulePage() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+              {/* How long the pattern runs for */}
+              <div>
+                <p className="text-ink-body font-medium mb-2">How long do you need it?</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label className="text-sm">
+                    <span className="block text-ink-muted mb-1">First week starting</span>
+                    <input
+                      type="date"
+                      value={activeFrom}
+                      min={todayValue()}
+                      onChange={(e) => setActiveFrom(e.target.value)}
+                      className="w-full border border-surface-line rounded-lg px-3 py-2 text-ink-body focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                    />
+                  </label>
+                  <label className="text-sm">
+                    <span className="block text-ink-muted mb-1">
+                      Last day <span className="text-ink-muted">(optional)</span>
+                    </span>
+                    <input
+                      type="date"
+                      value={activeUntil}
+                      min={activeFrom || todayValue()}
+                      onChange={(e) => setActiveUntil(e.target.value)}
+                      className="w-full border border-surface-line rounded-lg px-3 py-2 text-ink-body focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                    />
+                  </label>
+                </div>
+                <p className="text-ink-muted text-xs mt-2">
+                  {activeUntil
+                    ? 'Bookings are made up to that day and no further.'
+                    : 'Without an end date, bookings are made for the next 90 days only. If your time here has an end — a contract or a project — setting it frees the desk for everyone else afterwards.'}
+                </p>
+              </div>
+
               {/* Day selection */}
               <div>
                 <p className="text-ink-body font-medium mb-2">Days of the week</p>
@@ -222,8 +292,8 @@ export default function RecurringSchedulePage() {
               </div>
 
               <p className="text-ink-muted text-xs -mt-2">
-                Office hours are {OFFICE_HOURS_LABEL}, Monday through Friday. A desk is
-                assigned automatically and booked for the next 90 days.
+                Office hours are {OFFICE_HOURS_LABEL}, Monday through Friday. One desk is
+                assigned for the whole pattern.
               </p>
 
               {error && (
