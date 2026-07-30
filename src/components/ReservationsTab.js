@@ -3,7 +3,12 @@ import { CalendarX, Search, Pencil } from 'lucide-react';
 import { getAllReservations, adminCancelReservation } from '../api/client';
 import EditReservationModal from './EditReservationModal';
 
+// Ongoing first, because it is the only one that answers "right now" — and the
+// state that had nowhere to live before, since Upcoming meant "not finished"
+// and so claimed anything underway. The four partition: a booking is in exactly
+// one of ongoing, upcoming and past, and All is their sum.
 const SCOPES = [
+  { key: 'ongoing', label: 'Ongoing' },
   { key: 'upcoming', label: 'Upcoming' },
   { key: 'past', label: 'Past' },
   { key: 'all', label: 'All' },

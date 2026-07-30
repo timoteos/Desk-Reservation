@@ -100,3 +100,33 @@ test('searching never turns up a schedule day', async () => {
 
   expect(await screen.findByText(/No one-off booking matches that search/)).toBeInTheDocument();
 });
+
+test('a booking underway has its own scope, and it is asked for by name', async () => {
+  // Upcoming used to mean "not finished", so anything running right now was
+  // filed under a heading saying it had not happened yet — and there was
+  // nowhere to see what was happening at that moment.
+  render(<ReservationsTab />);
+  await screen.findByText('Penny Kabua');
+
+  fireEvent.click(screen.getByRole('button', { name: 'Ongoing' }));
+
+  await waitFor(() => expect(api.getAllReservations).toHaveBeenCalledWith('ongoing'));
+});
+
+test('the scopes read as four, with Ongoing offered first', async () => {
+  render(<ReservationsTab />);
+  await screen.findByText('Penny Kabua');
+
+  ['Ongoing', 'Upcoming', 'Past', 'All'].forEach((label) => {
+    expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
+  });
+});
+
+test('the empty state and the count both name the scope being viewed', async () => {
+  api.getAllReservations.mockResolvedValue([]);
+  render(<ReservationsTab />);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Ongoing' }));
+
+  expect(await screen.findByText(/No ongoing one-off bookings/)).toBeInTheDocument();
+});

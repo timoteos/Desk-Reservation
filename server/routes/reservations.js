@@ -67,14 +67,29 @@ router.get('/', async (req, res, next) => {
            WHERE r.status = 'approved' AND r.ends_at < now()
            ORDER BY r.starts_at DESC`
       );
+    } else if (scope === 'ongoing') {
+      // Happening right now. Started and not yet finished, which is the state an
+      // admin standing in the room is actually asking about — who is at that
+      // desk at this moment.
+      result = await query(
+        `${SELECT_RESERVATION}
+           WHERE r.status = 'approved'
+             AND r.starts_at <= now() AND r.ends_at > now()
+           ORDER BY r.starts_at`
+      );
     } else if (scope === 'all') {
       result = await query(
         `${SELECT_RESERVATION} WHERE r.status = 'approved' ORDER BY r.starts_at DESC`
       );
     } else {
+      // Upcoming means not started. It used to mean `ends_at >= now()`, which
+      // swept in whatever was running at that moment — so a booking underway
+      // was filed under a heading saying it had not happened yet, and there was
+      // nowhere at all to see what was happening now. The three scopes now
+      // partition: ongoing, upcoming and past are exclusive and together are all.
       result = await query(
         `${SELECT_RESERVATION}
-           WHERE r.status = 'approved' AND r.ends_at >= now()
+           WHERE r.status = 'approved' AND r.starts_at > now()
            ORDER BY r.starts_at`
       );
     }
