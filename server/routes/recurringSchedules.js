@@ -1,6 +1,6 @@
 const express = require('express');
 const { pool } = require('../db');
-const { generateConfirmationCode, toDateString } = require('../lib/reservationShape');
+const { generateConfirmationCode, generateUniqueCode, toDateString } = require('../lib/reservationShape');
 const { expiryFor } = require('../lib/expirePending');
 const { recordActivity } = require('../lib/activityLog');
 const { readToken } = require('../lib/auth');
@@ -153,6 +153,7 @@ router.post('/', async (req, res, next) => {
     // that a later edit could change.
     const scheduleIds = {};
     let seriesId = null;
+    let seriesCode = null;
     for (const [dayKey, times] of Object.entries(days)) {
       const { rows } = await client.query(
         `INSERT INTO recurring_schedules
@@ -177,9 +178,13 @@ router.post('/', async (req, res, next) => {
       scheduleIds[dayKey] = rows[0].schedule_id;
       if (seriesId === null) {
         seriesId = rows[0].schedule_id;
+        // The one code the holder gets, on the row that names the series. It
+        // outlives every edit, because an admin moving the desk does not give
+        // somebody a new arrangement.
+        seriesCode = await generateUniqueCode(client);
         await client.query(
-          'UPDATE recurring_schedules SET series_id = $1 WHERE schedule_id = $1',
-          [seriesId]
+          'UPDATE recurring_schedules SET series_id = $1, series_code = $2 WHERE schedule_id = $1',
+          [seriesId, seriesCode]
         );
       }
     }
@@ -222,6 +227,8 @@ router.post('/', async (req, res, next) => {
 
     res.status(201).json({
       status: 'pending',
+      // One code for the arrangement, not one per generated day.
+      confirmationCode: seriesCode,
       expiresAt,
       deskNumber: chosenDesk.desk_number,
       activeFrom: toDateString(from),

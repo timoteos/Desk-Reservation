@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { CalendarClock, Search, AlertTriangle, Pencil } from 'lucide-react';
 import { getSchedules, adminCancelSeries } from '../api/client';
 import EditScheduleModal from './EditScheduleModal';
+import ScheduleDays from './ScheduleDays';
 
 // A schedule's state is not a tense, so this is not the Reservations tab's
 // Upcoming/Past/All. An arrangement running August to October is neither
@@ -98,6 +99,7 @@ export default function SchedulesTab({ dataVersion = 0, onChanged }) {
   const [busyId, setBusyId] = useState(null);
   const [notice, setNotice] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [expandedDays, setExpandedDays] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -294,6 +296,19 @@ export default function SchedulesTab({ dataVersion = 0, onChanged }) {
                     {s.decidedBy && !over && (
                       <p className="text-ink-muted text-xs mt-1">Approved by {s.decidedBy}</p>
                     )}
+
+                    {/* Stays clickable once opened even after the last day is
+                        released, so the panel explaining that can be closed. */}
+                    {!over && (s.bookingsRemaining > 0 || expandedDays === s.id) && (
+                      <button
+                        onClick={() => setExpandedDays(expandedDays === s.id ? null : s.id)}
+                        className="text-mqd-700 text-xs font-semibold mt-1.5 hover:underline"
+                      >
+                        {expandedDays === s.id
+                          ? 'Hide days'
+                          : `Show the ${s.bookingsRemaining} day${s.bookingsRemaining === 1 ? '' : 's'} still to come`}
+                      </button>
+                    )}
                   </div>
 
                   {/* Only a live arrangement can be ended. One that has run its
@@ -343,6 +358,14 @@ export default function SchedulesTab({ dataVersion = 0, onChanged }) {
                     )
                   )}
                 </div>
+
+                {expandedDays === s.id && (
+                  <ScheduleDays
+                    seriesId={s.id}
+                    deskNumber={s.deskNumber}
+                    onChanged={async () => { await load(); onChanged?.(); }}
+                  />
+                )}
               </div>
             );
           })}

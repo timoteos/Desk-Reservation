@@ -59,7 +59,7 @@ test('opens on the schedule as it stands and discounts its own bookings', async 
 
 test('a partly taken desk cannot be picked', async () => {
   openDialog();
-  await waitFor(() => expect(screen.getByLabelText(/Desk 5/)).toBeInTheDocument());
+  await screen.findByLabelText(/Desk 5/);
 
   expect(screen.getByLabelText('Desk 5, partial')).toBeDisabled();
   expect(screen.getByLabelText('Desk 9, available')).toBeEnabled();
@@ -67,7 +67,7 @@ test('a partly taken desk cannot be picked', async () => {
 
 test('moving to a clear desk saves the whole pattern', async () => {
   openDialog();
-  await waitFor(() => expect(screen.getByLabelText('Desk 9, available')).toBeInTheDocument());
+  await screen.findByLabelText('Desk 9, available');
 
   fireEvent.click(screen.getByLabelText('Desk 9, available'));
   expect(screen.getByText(/free for all 14 days/)).toBeInTheDocument();
@@ -111,11 +111,11 @@ test('a refusal from the server is shown and the dialog stays open', async () =>
   api.adminEditSchedule.mockRejectedValue(new Error('Desk# 5 is already booked on 7 of the 14 days'));
   render(<EditScheduleModal schedule={SCHEDULE} onClose={onClose} onSaved={() => {}} />);
 
-  await waitFor(() => expect(screen.getByLabelText('Desk 9, available')).toBeInTheDocument());
+  await screen.findByLabelText('Desk 9, available');
   fireEvent.click(screen.getByLabelText('Desk 9, available'));
   fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
-  await waitFor(() => expect(screen.getByText(/already booked on 7 of the 14 days/)).toBeInTheDocument());
+  await screen.findByText(/already booked on 7 of the 14 days/);
   expect(onClose).not.toHaveBeenCalled();
 });
 

@@ -224,11 +224,20 @@ export default function RecurringSchedulePage() {
                 ))}
               </div>
 
-              {result.skipped.length > 0 && (
-                <p className="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-4 py-3 text-sm mt-2 w-full">
-                  {result.skipped.length} date{result.skipped.length === 1 ? ' was' : 's were'} skipped
-                  because that desk was already booked at the time.
-                </p>
+              {/* One code for the whole arrangement, not one per generated day.
+                  It is what they look the schedule up with, release a single day
+                  with, and — once check-in exists — check in with. */}
+              {result.confirmationCode && (
+                <div className="bg-surface-page border border-surface-line rounded-lg px-4 py-3 mt-3 w-full">
+                  <p className="text-ink-body text-sm">
+                    <span className="font-semibold text-mqd-title">Confirmation code:</span>{' '}
+                    <span className="font-mono tracking-wider">{result.confirmationCode}</span>
+                  </p>
+                  <p className="text-ink-muted text-xs mt-1">
+                    One code for the whole schedule — the same one every day you come in.
+                    Keep it to check or change your days.
+                  </p>
+                </div>
               )}
               <button
                 onClick={() => navigate('/reservation')}

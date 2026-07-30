@@ -4,6 +4,7 @@ const { expirePending } = require('../lib/expirePending');
 const { toTimestamps, generateConfirmationCode, toDateString } = require('../lib/reservationShape');
 const { requireAdmin } = require('../lib/auth');
 const { recordActivity } = require('../lib/activityLog');
+const { endSeries } = require('../lib/endSeries');
 const { officeHoursError, workingDayError } = require('../lib/officeHours');
 const { bookableDeskError } = require('../lib/deskGuard');
 
@@ -336,72 +337,31 @@ router.patch('/reservations/:id', async (req, res, next) => {
 
 // PATCH /api/requests/schedules/:id/cancel
 //
-// Ends a recurring schedule and releases the bookings it still holds. A holder
-// has one confirmation code per occurrence and no way to end the pattern, so a
-// finished contract used to keep its desk until the horizon ran out.
-//
-// Only future bookings are touched. Occurrences already served are history and
-// cancelling them would rewrite what happened.
+// Ends a recurring schedule and releases the bookings it still holds. The work
+// is in lib/endSeries, shared with the holder ending their own from the
+// confirmation code page — one operation, not two that drift.
 router.patch('/schedules/:id/cancel', async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // A Mon/Wed/Fri pattern is three schedule rows, so ending it means ending all
-    // of them — every row sharing the series_id.
-    const { rows: siblings } = await client.query(
-      `SELECT s2.schedule_id, u.first_name, u.last_name
-         FROM recurring_schedules s1
-         JOIN recurring_schedules s2 ON s2.series_id = s1.series_id
-         JOIN users u ON u.user_id = s2.user_id
-        WHERE s1.schedule_id = $1 AND s2.status <> 'canceled'`,
-      [req.params.id]
-    );
+    const result = await endSeries(client, {
+      scheduleId: req.params.id,
+      actorUserId: resolveDecider(req),
+    });
 
-    if (siblings.length === 0) {
+    if (!result) {
       await client.query('ROLLBACK');
       return res.status(409).json({
         message: 'That schedule is no longer active — it may already have been ended.',
       });
     }
 
-    const scheduleIds = siblings.map((r) => r.schedule_id);
-    const schedule = siblings;
-
-    const { rowCount } = await client.query(
-      `UPDATE reservations
-          SET status = 'canceled', expires_at = NULL,
-              decided_by_user_id = $2, decided_at = now()
-        WHERE schedule_id = ANY($1::int[])
-          AND status IN ('pending', 'approved')
-          AND ends_at > now()`,
-      [scheduleIds, resolveDecider(req)]
-    );
-
-    // The schedules are closed off as well as their bookings, so nothing
-    // regenerates and the end date records when it actually stopped.
-    await client.query(
-      `UPDATE recurring_schedules
-          SET status = 'canceled', expires_at = NULL, active_until = CURRENT_DATE,
-              decided_by_user_id = $2, decided_at = now()
-        WHERE schedule_id = ANY($1::int[])`,
-      [scheduleIds, resolveDecider(req)]
-    );
-
-    await recordActivity({
-      activityType: 'series_ended',
-      scheduleId: Number(req.params.id),
-      actorUserId: resolveDecider(req),
-      metadata: { bookingsCanceled: rowCount, scheduleIds },
-      description: `Ended ${schedule[0].first_name} ${schedule[0].last_name}'s recurring schedule — `
-        + `${rowCount} upcoming booking(s) released`,
-    }, client);
-
     await client.query('COMMIT');
     res.json({
       scheduleId: String(req.params.id),
-      schedulesEnded: scheduleIds.length,
-      bookingsCanceled: rowCount,
+      schedulesEnded: result.scheduleIds.length,
+      bookingsCanceled: result.bookingsCanceled,
     });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
