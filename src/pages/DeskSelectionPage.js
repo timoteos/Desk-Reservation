@@ -12,6 +12,8 @@ import {
   OFFICE_HOURS_LABEL,
   timeOptions,
   isWorkingDay,
+  earliestStartOn,
+  formatMinutes,
 } from '../lib/officeHours';
 
 const CRUMBS = [
@@ -49,9 +51,25 @@ export default function DeskSelectionPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const dateStr = searchParams.get('date') || todayValue();
-  const startMin = parseInt(searchParams.get('startMin') || String(OFFICE_START), 10);
-  const endMin = parseInt(searchParams.get('endMin') || String(OFFICE_START + 60), 10);
+  // Read defensively. These come from the URL, so they can be absent, malformed
+  // or out of range — and an unvalidated parseInt gave NaN, which left the end
+  // dropdown with no options at all and made every desk read as free, because
+  // nothing overlaps NaN.
+  const rawDate = searchParams.get('date') || '';
+  const dateStr =
+    /^\d{4}-\d{2}-\d{2}$/.test(rawDate) && !Number.isNaN(new Date(`${rawDate}T00:00:00`).getTime())
+      ? rawDate
+      : todayValue();
+
+  const readMinute = (key, fallback) => {
+    const n = parseInt(searchParams.get(key) ?? '', 10);
+    if (!Number.isFinite(n)) return fallback;
+    const snapped = Math.round(n / SLOT_MINUTES) * SLOT_MINUTES;
+    return Math.min(Math.max(snapped, OFFICE_START), OFFICE_END);
+  };
+
+  const startMin = Math.min(readMinute('startMin', OFFICE_START), OFFICE_END - SLOT_MINUTES);
+  const endMin = Math.max(readMinute('endMin', startMin + 60), startMin + SLOT_MINUTES);
 
   // Both writers take the updater form so they read the latest params rather
   // than the ones captured when this render ran.
@@ -85,11 +103,26 @@ export default function DeskSelectionPage() {
 
   const closedDay = !isWorkingDay(dateStr);
 
+  // What is still bookable today. Without this the page would offer a window
+  // that had already begun, and the refusal only arrived two screens later at
+  // the email step.
+  const earliest = earliestStartOn(dateStr);
+  const dayOver = earliest > OFFICE_END - SLOT_MINUTES;
+  const windowPassed = !closedDay && startMin < earliest;
+
   // A desk is unavailable when an existing booking overlaps the chosen window,
   // so this refetches whenever the window moves — that is when the answer
   // changes.
   useEffect(() => {
-    if (closedDay) { setDesks([]); setLoading(false); return undefined; }
+    // Clearing the selection matters as much as clearing the desks: picking a
+    // desk and then moving the window backwards would otherwise leave a
+    // selection standing with nothing on screen to contradict it.
+    if (closedDay || windowPassed) {
+      setDesks([]);
+      setSelectedDesk(null);
+      setLoading(false);
+      return undefined;
+    }
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -115,7 +148,7 @@ export default function DeskSelectionPage() {
       });
 
     return () => { cancelled = true; };
-  }, [dateStr, startMin, endMin, closedDay]);
+  }, [dateStr, startMin, endMin, closedDay, windowPassed]);
 
   return (
     <>
@@ -152,7 +185,9 @@ export default function DeskSelectionPage() {
                   className="border border-surface-line rounded-lg px-3 py-2 text-ink-body bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
                 >
                   {timeOptions({ to: OFFICE_END - SLOT_MINUTES }).map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
+                    <option key={o.value} value={o.value} disabled={o.value < earliest}>
+                      {o.label}
+                    </option>
                   ))}
                 </select>
               </label>
@@ -175,6 +210,14 @@ export default function DeskSelectionPage() {
         {closedDay && (
           <div className="w-full max-w-5xl bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-6 py-4 text-sm">
             The office is closed that day. Pick a weekday to see the floor plan.
+          </div>
+        )}
+
+        {!closedDay && windowPassed && (
+          <div className="w-full max-w-5xl bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-6 py-4 text-sm">
+            {dayOver
+              ? 'The office day has finished. Pick another date.'
+              : `That time has already passed. The next bookable slot today is ${formatMinutes(earliest)}.`}
           </div>
         )}
 
@@ -209,7 +252,7 @@ export default function DeskSelectionPage() {
             label="Back to date and time"
           />
           <button
-            disabled={!selectedDesk}
+            disabled={!selectedDesk || closedDay || windowPassed}
             onClick={() => {
               if (!selectedDesk) return;
               // deskId identifies the row for the booking; deskNumber is what a

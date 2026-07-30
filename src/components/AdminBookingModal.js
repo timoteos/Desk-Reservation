@@ -3,13 +3,13 @@ import { X, CheckCircle2 } from 'lucide-react';
 import DeskMap, { DeskMapLegend, deskStatuses } from './DeskMap';
 import { adminBook, getDesks, getReservationsForDate } from '../api/client';
 import {
-  OFFICE_START,
   OFFICE_END,
   SLOT_MINUTES,
   OFFICE_HOURS_LABEL,
   formatMinutes,
   timeOptions,
   isWorkingDay,
+  earliestStartOn,
 } from '../lib/officeHours';
 
 const todayValue = () => {
@@ -28,8 +28,16 @@ const todayValue = () => {
 export default function AdminBookingModal({ users, onClose, onBooked }) {
   const [userId, setUserId] = useState('');
   const [date, setDate] = useState(todayValue());
-  const [start, setStart] = useState(OFFICE_START);
-  const [end, setEnd] = useState(OFFICE_END);
+  // Opening on the whole office day meant that from 7:30 AM onwards the default
+  // state could never be booked — a full map of apparently free desks, and a
+  // refusal on the first click. Start from what is actually still available.
+  const [start, setStart] = useState(() =>
+    Math.min(earliestStartOn(todayValue()), OFFICE_END - SLOT_MINUTES));
+  const [end, setEnd] = useState(() =>
+    Math.min(
+      Math.min(earliestStartOn(todayValue()), OFFICE_END - SLOT_MINUTES) + 60,
+      OFFICE_END
+    ));
   const [deskId, setDeskId] = useState(null);
 
   const [desks, setDesks] = useState([]);
@@ -49,7 +57,12 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
   // window moves — the same coupling the edit dialog relies on.
   useEffect(() => {
     if (result) return undefined;
-    if (!isWorkingDay(date)) { setDesks([]); setLoadingDesks(false); return undefined; }
+    if (!isWorkingDay(date) || start < earliestStartOn(date)) {
+      setDesks([]);
+      setDeskId(null);
+      setLoadingDesks(false);
+      return undefined;
+    }
     let cancelled = false;
     setLoadingDesks(true);
 
@@ -75,7 +88,10 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
   // A date input cannot grey out weekends the way the calendar can, so the rule
   // is stated instead of enforced by the control.
   const closedDay = !isWorkingDay(date);
-  const canSubmit = userId && date && !closedDay && !submitting;
+  const earliest = earliestStartOn(date);
+  const dayOver = earliest > OFFICE_END - SLOT_MINUTES;
+  const windowPassed = !closedDay && start < earliest;
+  const canSubmit = userId && date && !closedDay && !windowPassed && !submitting;
   const selectedDesk = desks.find((d) => String(d.id) === String(deskId));
 
   const handleSubmit = async (e) => {
@@ -191,7 +207,9 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
                   className="w-full border border-surface-line rounded-lg px-3 py-2.5 text-ink-body text-sm bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
                 >
                   {timeOptions({ to: OFFICE_END - SLOT_MINUTES }).map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
+                    <option key={o.value} value={o.value} disabled={o.value < earliest}>
+                      {o.label}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -219,6 +237,14 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
             {closedDay && (
               <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm">
                 The office is closed that day. Pick a weekday.
+              </p>
+            )}
+
+            {!closedDay && windowPassed && (
+              <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm">
+                {dayOver
+                  ? 'The office day has finished. Pick another date.'
+                  : `That time has already passed. The next bookable slot today is ${formatMinutes(earliest)}.`}
               </p>
             )}
 

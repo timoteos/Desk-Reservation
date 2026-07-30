@@ -156,7 +156,7 @@ export default function RecurringSchedulePage() {
                         className={`py-3 rounded-lg text-xs sm:text-sm font-semibold border transition
                           ${isSelected
                             ? 'bg-mqd-btn text-white border-mqd-btn'
-                            : 'bg-white text-ink-body border-surface-line hover:bg-surface-page'}`}
+                            : 'bg-white text-ink-body border-surface-line hover:bg-surface-panel'}`}
                       >
                         {day.label.slice(0, 3)}
                       </button>

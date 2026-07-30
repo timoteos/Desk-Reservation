@@ -228,7 +228,7 @@ export default function EditReservationModal({ reservation, onClose, onSaved }) 
           <button
             onClick={onClose}
             disabled={saving}
-            className="px-5 border border-surface-line hover:bg-surface-page disabled:opacity-40 text-ink-body font-semibold rounded-lg transition"
+            className="px-5 border border-surface-line hover:bg-surface-panel disabled:opacity-40 text-ink-body font-semibold rounded-lg transition"
           >
             Cancel
           </button>
