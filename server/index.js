@@ -15,9 +15,34 @@ const authRouter = require('./routes/auth');
 const { readToken } = require('./lib/auth');
 
 const app = express();
-const PORT = process.env.SERVER_PORT || 5000;
 
-app.use(cors());
+// PORT is what every host injects — Render, Railway, Fly, Heroku all set it and
+// then health-check the port they chose. Reading only SERVER_PORT meant binding
+// 5000 regardless, so a deploy would report success while nothing could reach
+// the API. SERVER_PORT stays first so local .env files keep working.
+const PORT = process.env.SERVER_PORT || process.env.PORT || 5000;
+
+// Wide-open CORS is right for a laptop and wrong once this is reachable: the
+// booking and lookup endpoints are deliberately public, so without an allowlist
+// any site could drive them from a visitor's browser. Comma-separated origins,
+// and with none set it stays open so local development is unchanged.
+const allowedOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+app.use(cors(
+  allowedOrigins.length === 0 ? undefined : {
+    origin(origin, callback) {
+      // No Origin header means curl, a health check, or a same-origin request.
+      // A disallowed one is answered without the headers rather than with an
+      // error: the browser is what enforces CORS, and raising here would turn
+      // somebody else's page into a 500 and a stack trace in our logs — which
+      // anyone could then generate at will.
+      callback(null, !origin || allowedOrigins.includes(origin));
+    },
+  }
+));
 app.use(express.json());
 // Populates req.user when a valid token is present; routes decide if they need one.
 app.use(readToken);

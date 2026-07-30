@@ -5,7 +5,7 @@ const { toTimestamps, generateConfirmationCode, toDateString } = require('../lib
 const { requireAdmin } = require('../lib/auth');
 const { recordActivity } = require('../lib/activityLog');
 const { endSeries } = require('../lib/endSeries');
-const { officeHoursError, workingDayError } = require('../lib/officeHours');
+const { tooSoonError, officeHoursError, workingDayError } = require('../lib/officeHours');
 const { bookableDeskError } = require('../lib/deskGuard');
 
 const router = express.Router();
@@ -155,9 +155,8 @@ router.post('/book', async (req, res, next) => {
 
     const { startsAt, endsAt } = toTimestamps(date, startMin, endMin);
 
-    if (startsAt <= new Date()) {
-      return res.status(400).json({ message: 'That time has already passed. Pick a later slot.' });
-    }
+    const timingProblem = tooSoonError(startsAt);
+    if (timingProblem) return res.status(400).json({ message: timingProblem });
 
     let resolvedDeskId = deskId;
     if (!resolvedDeskId) {
@@ -272,9 +271,8 @@ router.patch('/reservations/:id', async (req, res, next) => {
       if (hoursProblem) return res.status(400).json({ message: hoursProblem });
 
       ({ startsAt, endsAt } = toTimestamps(date, startMin, endMin));
-      if (startsAt <= new Date()) {
-        return res.status(400).json({ message: 'That time has already passed. Pick a later slot.' });
-      }
+      const timingProblem = tooSoonError(startsAt);
+      if (timingProblem) return res.status(400).json({ message: timingProblem });
     }
 
     const nextDeskId = deskId ?? before.desk_id;

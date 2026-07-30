@@ -5,9 +5,41 @@
 // frontend decides what to offer, this decides what is accepted. A request that
 // bypasses the interface still cannot book the office at midnight.
 
+// The office is in Honolulu, and so is every time this app stores.
+//
+// starts_at and ends_at are `timestamp without time zone` — wall clock, no
+// offset — which round-trips correctly whatever timezone the server runs in.
+// What does not round-trip is comparing one of those to `new Date()`: the Date
+// was built with `new Date(y, m, d, h, min)`, which reads the *server's* zone,
+// so on a UTC host "3pm today" becomes an instant ten hours before Honolulu's
+// 3pm and every slot in the working day reports as already past. That is
+// precisely what happened on Render: bookings for today were impossible from
+// 7am Hawaii time onwards, while the same code on a laptop in HST was fine.
+//
+// Setting TZ here rather than in the host's dashboard keeps the fix in version
+// control, applies to every entry point that computes an office time, and
+// cannot be forgotten when the app moves to a different host.
+//
+// Unconditional, deliberately. Honouring an ambient TZ would mean a host that
+// exports TZ=UTC — which is most of them — silently reinstates the bug, and the
+// value being overridden is not a preference anybody holds: it is where the
+// desks physically are.
+//
+// This is a module side effect, which is unusual — it lives here because this
+// file is what defines the office's day, and a timezone is part of that
+// definition. If MQD ever has an office outside Hawaii, this is the assumption
+// that has to be replaced with a per-office zone.
+const OFFICE_TZ = 'Pacific/Honolulu';
+process.env.TZ = OFFICE_TZ;
+
 const OFFICE_START = 450;  // 7:30 AM, in minutes from midnight
 const OFFICE_END = 1020;   // 5:00 PM
 const SLOT_MINUTES = 30;
+
+// How long before a slot starts bookings close. Somebody heading to a desk for
+// an 11:00 start can still claim it at 10:55, but not at 10:56 — the desk needs
+// to stop being bookable slightly before it is meant to be occupied.
+const BOOKING_LEAD_MINUTES = 5;
 
 const formatMinutes = (mins) => {
   const h = Math.floor(mins / 60);
@@ -56,7 +88,31 @@ function workingDayError(date) {
 // Convenience for routes that hold timestamps rather than minute offsets.
 const minutesOf = (date) => date.getHours() * 60 + date.getMinutes();
 
+// Whether a slot is still claimable, as one function so the three routes that
+// create or move a booking answer it identically. They each carried their own
+// `startsAt <= new Date()`, which is how a lead time could have been added to
+// one of them and not the others.
+//
+// The two cases are separated because they are different situations to be in:
+// asking for yesterday is a mistake, and asking for a slot four minutes out is
+// a near miss that deserves to say so.
+function tooSoonError(startsAt) {
+  const now = Date.now();
+  const start = startsAt.getTime();
+
+  if (start <= now) {
+    return 'That time has already passed. Pick a later slot.';
+  }
+  if (start < now + BOOKING_LEAD_MINUTES * 60 * 1000) {
+    return `Bookings close ${BOOKING_LEAD_MINUTES} minutes before a slot starts. Pick a later slot.`;
+  }
+  return null;
+}
+
 module.exports = {
+  OFFICE_TZ,
+  BOOKING_LEAD_MINUTES,
+  tooSoonError,
   OFFICE_START,
   OFFICE_END,
   SLOT_MINUTES,

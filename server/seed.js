@@ -1,37 +1,80 @@
 // Populates the database with the same fixtures the frontend mock files use,
 // so the app behaves identically once pages are wired to the API.
 //
-// Run with: npm run seed
+//   npm run seed        local fixtures, real colleagues' names, laptop only
+//   npm run seed:demo   invented people on example.com, safe to publish
+//
+// This script begins by TRUNCATEing every table, which is what a fixture loader
+// should do and is catastrophic pointed at the wrong database. Both guards below
+// exist because the only thing standing between the two is an environment
+// variable that is easy to leave set in a shell.
 require('dotenv').config();
 const { pool, query } = require('./db');
 const { generateConfirmationCode } = require('./lib/reservationShape');
 const { hashPassword } = require('./lib/auth');
 const { seedActivities } = require('./lib/activityLog');
+const { datasetFor, emailFor } = require('./seedPeople');
 
-// A development fixture, not a credential. Printed on seed so it's findable,
-// and it only ever exists in a local database. Any real deployment must set a
-// different password before the account is reachable.
+const MODE = process.argv.includes('--demo') || process.env.SEED_MODE === 'demo'
+  ? 'demo'
+  : 'local';
+
+const dataset = datasetFor(MODE);
+const USERS = dataset.people;
+const ADMIN = dataset.admin;
+const RESERVATIONS = dataset.reservations;
+
+// A development fixture, not a credential. It only ever exists in a local
+// database — a reachable deployment has to supply its own, because a password
+// committed to a public repository protects nothing.
 const DEV_ADMIN_PASSWORD = 'mqd-dev-admin';
 
-const USERS = [
-  ['Angello', 'Portillo'], ['Keanu', 'Ishihara'], ['Timoteo', 'Sumalinog'],
-  ['Michael', 'Barbieto'], ['Penny', 'Kabua'], ['Mark', 'Burgess'],
-  ['Rafael', 'Abitz'], ['Megan', 'Yamamoto'], ['Steve', 'Elias'],
-  ['Cacie', 'Sonomura'], ['Travis', 'Quensenberry'], ['Keith', 'Bangi'],
-  ['Phan', 'Sirivattha'], ['Rhona', 'Ramos'], ['Michael', 'Mau'],
-  ['Marivic', 'Baitalon'],
-];
-
-const ADMIN = 'Timoteo Sumalinog';
-
-// Accounts whose address doesn't follow the first.last convention.
-const EMAIL_OVERRIDES = {
-  'Timoteo Sumalinog': 'tsumalinog-int@dhs.hawaii.gov',
+const adminPassword = () => {
+  if (MODE === 'local') return DEV_ADMIN_PASSWORD;
+  const supplied = process.env.DEMO_ADMIN_PASSWORD;
+  if (!supplied) {
+    throw new Error(
+      'DEMO_ADMIN_PASSWORD is not set. A published demo cannot use the password '
+      + 'that is written in this file — anyone reading the repository would be an '
+      + 'administrator on it.'
+    );
+  }
+  return supplied;
 };
 
-const emailFor = (first, last) =>
-  EMAIL_OVERRIDES[`${first} ${last}`] ||
-  `${first.toLowerCase()}.${last.toLowerCase()}@dhs.hawaii.gov`;
+// Anything that is not a loopback host is somebody else's data.
+const isLocalDatabase = (url) => {
+  if (!url) return true;                       // unix socket, local by definition
+  try {
+    const { hostname } = new URL(url);
+    return ['localhost', '127.0.0.1', '::1', ''].includes(hostname);
+  } catch {
+    return false;                              // unparseable: assume the worst
+  }
+};
+
+// Host only — never the whole URL, which carries the password.
+const describeTarget = () => {
+  const url = process.env.DATABASE_URL;
+  if (!url) return 'local socket (no DATABASE_URL set)';
+  try {
+    const { hostname, pathname } = new URL(url);
+    return `${hostname || 'local socket'}${pathname}`;
+  } catch {
+    return 'unparseable DATABASE_URL';
+  }
+};
+
+function assertSafeTarget() {
+  const url = process.env.DATABASE_URL;
+  if (isLocalDatabase(url) || process.env.ALLOW_REMOTE_SEED === '1') return;
+
+  const { hostname } = new URL(url);
+  throw new Error(
+    `Refusing to seed ${hostname}: this script truncates every table.\n`
+    + '  If that is genuinely what you want, re-run with ALLOW_REMOTE_SEED=1.'
+  );
+}
 
 // Same bookings as src/data/mockReservations.js, relative to today.
 const dayOffset = (days) => {
@@ -47,15 +90,23 @@ const at = (base, minutes) => {
   return d;
 };
 
-const RESERVATIONS = [
-  { name: 'Keanu Ishihara',   deskNumber: 1, dayOffset: 0, startMin: 600, endMin: 690 },
-  { name: 'Penny Kabua',      deskNumber: 2, dayOffset: 1, startMin: 540, endMin: 600 },
-  { name: 'Megan Yamamoto',   deskNumber: 3, dayOffset: 1, startMin: 780, endMin: 900 },
-  { name: 'Angello Portillo', deskNumber: 4, dayOffset: 2, startMin: 480, endMin: 720 },
-  { name: 'Rafael Abitz',     deskNumber: 5, dayOffset: 2, startMin: 810, endMin: 990 },
-];
-
 async function seed() {
+  // Everything that can refuse must refuse before the TRUNCATE.
+  //
+  // adminPassword() used to be called further down, next to where the hash is
+  // needed — which read naturally and meant a run missing DEMO_ADMIN_PASSWORD
+  // emptied the database and only then complained. A validation that fires after
+  // the destructive step is not a validation, it is an epitaph. This wiped a
+  // working local database exactly once, which was one time too many.
+  assertSafeTarget();
+  const password = adminPassword();
+
+  // Name the target before emptying it. The guards above cover the cases they
+  // can test for; this covers the one they cannot — a correct-looking command
+  // pointed at the wrong database, which is only obvious to the person reading.
+  console.log(`Target:  ${describeTarget()}`);
+  console.log(`Seeding ${MODE} fixtures (${USERS.length} people, @${dataset.domain})`);
+
   await query(
     'TRUNCATE logs, reservations, recurring_schedules, users, desks, roles RESTART IDENTITY CASCADE'
   );
@@ -74,7 +125,7 @@ async function seed() {
   await seedActivities();
   console.log('Inserted activity types');
 
-  const adminHash = await hashPassword(DEV_ADMIN_PASSWORD);
+  const adminHash = await hashPassword(password);
 
   const userIds = {};
   for (const [first, last] of USERS) {
@@ -86,7 +137,7 @@ async function seed() {
       [
         first,
         last,
-        emailFor(first, last),
+        emailFor(dataset, first, last),
         roleIds[isAdmin ? 'admin' : 'member'],
         // Only the admin can sign in; members book by email and have no
         // password until SSO or self-registration exists.
@@ -135,9 +186,12 @@ async function seed() {
   console.log('\nConfirmation codes for testing:');
   rows.forEach((row) => console.log(`  ${row.confirmation_code}  ${row.name}`));
 
-  console.log('\nAdmin sign-in (development fixture — change before any real use):');
-  console.log(`  ${EMAIL_OVERRIDES[ADMIN]}`);
-  console.log(`  ${DEV_ADMIN_PASSWORD}`);
+  const [adminFirst, adminLast] = ADMIN.split(' ');
+  console.log('\nAdmin sign-in:');
+  console.log(`  ${emailFor(dataset, adminFirst, adminLast)}`);
+  console.log(MODE === 'demo'
+    ? '  (the DEMO_ADMIN_PASSWORD you supplied)'
+    : `  ${password}`);
 }
 
 seed()
