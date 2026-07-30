@@ -119,7 +119,7 @@ function UserDetailModal({ user, onClose }) {
               <div key={r.id} className="border border-surface-line rounded-lg p-4 text-sm">
                 <p className="font-semibold text-ink">{formatDate(r.date)}</p>
                 <p className="text-ink-muted">
-                  Desk# {r.deskNumber} &middot; {formatMinutes(r.startMin)} - {formatMinutes(r.endMin)}
+                  {formatMinutes(r.startMin)} - {formatMinutes(r.endMin)} &middot; Desk# {r.deskNumber}
                 </p>
                 {/* Shown so an admin can give someone their code back when
                     they've lost it. Copyable because it usually gets pasted
@@ -272,11 +272,21 @@ function RequestCard({ request, onDecide, busy }) {
           </>
         ) : (
           <>
+            {/* Same reading order as the Reservations tab: when, then where. */}
             <p className="font-medium">{formatDate(request.date)}</p>
             <p className="text-ink-muted">
-              Desk# {request.deskNumber} &middot; {formatMinutes(request.startMin)} -{' '}
-              {formatMinutes(request.endMin)}
+              {formatMinutes(request.startMin)} - {formatMinutes(request.endMin)}{' '}
+              &middot; Desk# {request.deskNumber}
             </p>
+            {/* Shown so an admin can quote the code back to whoever is asking,
+                without approving first to find it. A recurring request has no
+                single code — each generated booking carries its own — so it
+                gets a count instead of a number it does not have. */}
+            {request.confirmationCode && (
+              <p className="font-mono text-xs text-ink-muted mt-1 select-all">
+                Confirmation Code: {request.confirmationCode}
+              </p>
+            )}
           </>
         )}
       </div>
@@ -335,8 +345,8 @@ function RequestsTab({ requests, loading, error, onDecide, busyId }) {
 
   return (
     <div className="bg-surface-panel border border-surface-line rounded-2xl p-6">
-      <h1 className="text-2xl font-bold text-ink tracking-wide mb-5">
-        PENDING REQUESTS
+      <h1 className="text-2xl font-bold text-ink mb-5">
+        Pending requests
       </h1>
       <div className="flex flex-col gap-3">
         {requests.map((request) => (

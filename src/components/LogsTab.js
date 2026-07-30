@@ -116,8 +116,8 @@ export default function LogsTab({ dataVersion = 0 }) {
                           avoids "Steve Elias — Steve Elias" on self-service. */}
                       {actorLabel(log) !== log.subject && <>{log.subject} &middot; </>}
                       {log.date && formatDate(log.date)}
-                      {log.deskNumber != null && <> &middot; Desk# {log.deskNumber}</>}
                       {log.startMin != null && <> &middot; {formatMinutes(log.startMin)} - {formatMinutes(log.endMin)}</>}
+                      {log.deskNumber != null && <> &middot; Desk# {log.deskNumber}</>}
                     </p>
                   )}
 
