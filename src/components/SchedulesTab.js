@@ -7,7 +7,7 @@ import { getSchedules, adminCancelSeries } from '../api/client';
 // upcoming nor past — it is active.
 const FILTERS = [
   { key: 'active', label: 'Active' },
-  { key: 'pending', label: 'Pending' },
+  { key: 'upcoming', label: 'Upcoming' },
   { key: 'ended', label: 'Ended' },
   { key: 'all', label: 'All' },
 ];
@@ -30,13 +30,26 @@ const STATE_STYLES = {
   denied: 'bg-red-100 text-red-800',
 };
 
-// Which filter a state belongs under. Ended and cancelled read as the same thing
-// to someone reviewing commitments — both are over.
+// Which filter a state belongs under.
+//
+// Active means running now, and Upcoming means approved but not started yet.
+// Those were one filter, which buried a genuine distinction: a schedule
+// beginning in a fortnight already holds its desks but nobody is sitting there.
+//
+// Ended and cancelled read as the same thing to someone reviewing commitments —
+// both are over — so they share a filter.
 const FILTER_MATCHES = {
-  active: ['active', 'upcoming'],
-  pending: ['pending'],
+  active: ['active'],
+  upcoming: ['upcoming'],
   ended: ['ended', 'canceled', 'denied'],
 };
+
+// Awaiting a decision is the Requests tab's business, not this one's. Listing
+// them here duplicated that tab while offering none of its actions, so the row
+// was something to look at and not act on. They are counted and pointed at
+// instead, which keeps this tab about arrangements that have been decided
+// without pretending the pending ones do not exist.
+const DECIDED = ['active', 'upcoming', 'ended', 'canceled', 'denied'];
 
 const formatMinutes = (mins) => {
   const h = Math.floor(mins / 60);
@@ -116,7 +129,10 @@ export default function SchedulesTab({ dataVersion = 0, onChanged }) {
   };
 
   const search = term.trim().toLowerCase();
-  const shown = schedules
+  const decided = schedules.filter((s) => DECIDED.includes(s.state));
+  const awaitingDecision = schedules.filter((s) => s.state === 'pending');
+
+  const shown = decided
     .filter((s) => filter === 'all' || FILTER_MATCHES[filter].includes(s.state))
     .filter((s) =>
       !search ||
@@ -128,7 +144,11 @@ export default function SchedulesTab({ dataVersion = 0, onChanged }) {
   // The warning that justifies this view existing. An open-ended schedule stops
   // generating when its horizon runs out, and nothing else in the interface says
   // when — the holder would find out by arriving to no desk.
-  const openEnded = schedules.filter((s) => s.openEnded && s.state === 'active');
+  // Upcoming counts too: a schedule starting next month with no end date will
+  // stop generating just the same, and it is easier to extend before it has run.
+  const openEnded = decided.filter(
+    (s) => s.openEnded && (s.state === 'active' || s.state === 'upcoming')
+  );
 
   return (
     <div className="bg-surface-panel border border-surface-line rounded-2xl p-6">
@@ -161,6 +181,14 @@ export default function SchedulesTab({ dataVersion = 0, onChanged }) {
             {' '}and will not resume.
           </span>
         </div>
+      )}
+
+      {awaitingDecision.length > 0 && (
+        <p className="text-ink-body bg-surface-page border border-surface-line rounded-lg px-4 py-3 text-sm mb-3">
+          {awaitingDecision.length} schedule{awaitingDecision.length === 1 ? '' : 's'} awaiting a
+          decision {awaitingDecision.length === 1 ? 'is' : 'are'} in <strong>Requests</strong>,
+          where {awaitingDecision.length === 1 ? 'it' : 'they'} can be approved or denied.
+        </p>
       )}
 
       <div className="relative mb-4">
@@ -296,7 +324,7 @@ export default function SchedulesTab({ dataVersion = 0, onChanged }) {
       )}
 
       <p className="text-ink-muted text-xs mt-4">
-        Showing {shown.length} of {schedules.length} schedule{schedules.length === 1 ? '' : 's'}.
+        Showing {shown.length} of {decided.length} decided schedule{decided.length === 1 ? '' : 's'}.
       </p>
     </div>
   );
