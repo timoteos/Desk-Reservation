@@ -1,5 +1,5 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Lock, LogOut, UserRound } from 'lucide-react';
+import { Lock, LogOut, UserRound, LayoutDashboard } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 // Inside the admin area the title is plain text — making it a home link there
@@ -57,6 +57,21 @@ export default function Header() {
             <UserRound className="w-3.5 h-3.5 shrink-0" />
             {admin.name}
           </span>
+          {/* The way back. An admin who follows the title link home has no route
+              to the dashboard except retyping the URL — the same stranding the
+              title link caused inside the admin area, from the other side.
+              Hidden while already in the admin area, where it would point at the
+              page you are on, exactly as the login button hides on the login
+              page. The label drops on narrow screens; the icon carries it. */}
+          {!inAdminArea && (
+            <Link
+              to="/admin/dashboard"
+              className="flex items-center gap-1.5 text-sm font-medium text-mqd-title bg-mqd-title/5 border border-mqd-title/30 rounded-full px-3 py-1.5 hover:bg-mqd-title/15 transition"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Dashboard</span>
+            </Link>
+          )}
           <button
             onClick={handleSignOut}
             className="flex items-center gap-1.5 text-sm font-medium text-mqd-title bg-mqd-title/5 border border-mqd-title/30 rounded-full px-3 py-1.5 hover:bg-mqd-title/15 transition"
