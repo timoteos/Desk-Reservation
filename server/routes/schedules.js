@@ -1,7 +1,7 @@
 const express = require('express');
 const { pool, query } = require('../db');
 const { requireAdmin } = require('../lib/auth');
-const { toDateString, generateConfirmationCode } = require('../lib/reservationShape');
+const { toDateString, generateConfirmationCode, toMinutes } = require('../lib/reservationShape');
 const { recordActivity } = require('../lib/activityLog');
 const {
   DAY_NUMBERS,
@@ -19,9 +19,6 @@ const DAY_LABELS = {
   0: 'Sunday', 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday',
   4: 'Thursday', 5: 'Friday', 6: 'Saturday',
 };
-
-const minutesOfDay = (ts) =>
-  new Date(ts).getHours() * 60 + new Date(ts).getMinutes();
 
 const minutesFrom = (time) => {
   const [h, m] = time.split(':').map(Number);
@@ -184,8 +181,8 @@ router.get('/:seriesId/days', async (req, res, next) => {
       rows.map((r) => ({
         id: String(r.reservation_id),
         date: toDateString(r.starts_at),
-        startMin: minutesOfDay(r.starts_at),
-        endMin: minutesOfDay(r.ends_at),
+        startMin: toMinutes(r.starts_at),
+        endMin: toMinutes(r.ends_at),
         status: r.status,
         deskNumber: r.desk_number,
       }))

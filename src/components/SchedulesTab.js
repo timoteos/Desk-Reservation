@@ -297,7 +297,9 @@ export default function SchedulesTab({ dataVersion = 0, onChanged }) {
                       <p className="text-ink-muted text-xs mt-1">Approved by {s.decidedBy}</p>
                     )}
 
-                    {!over && s.bookingsRemaining > 0 && (
+                    {/* Stays clickable once opened even after the last day is
+                        released, so the panel explaining that can be closed. */}
+                    {!over && (s.bookingsRemaining > 0 || expandedDays === s.id) && (
                       <button
                         onClick={() => setExpandedDays(expandedDays === s.id ? null : s.id)}
                         className="text-mqd-700 text-xs font-semibold mt-1.5 hover:underline"

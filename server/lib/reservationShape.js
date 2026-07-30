@@ -10,6 +10,8 @@ const pad = (n) => String(n).padStart(2, '0');
 const toDateString = (d) =>
   `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
+// Minutes past midnight, local. Timestamps arrive from pg as Date objects, so
+// this takes one directly.
 const toMinutes = (d) => d.getHours() * 60 + d.getMinutes();
 
 // Database row -> API response
@@ -80,6 +82,7 @@ async function generateUniqueCode(client, { length = 8, attempts = 10 } = {}) {
 module.exports = {
   rowToReservation,
   toTimestamps,
+  toMinutes,
   generateConfirmationCode,
   generateUniqueCode,
   toDateString,

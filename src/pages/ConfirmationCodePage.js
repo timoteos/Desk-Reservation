@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Ticket, CheckCircle2, XCircle } from 'lucide-react';
 import ScheduleResult from '../components/ScheduleResult';
+import { STATUS_LABELS, STATUS_STYLES, isLiveStatus } from '../lib/bookingStatus';
 import Breadcrumb from '../components/Breadcrumb';
 import { getReservationByCode, cancelReservation, ApiError } from '../api/client';
 
@@ -21,24 +22,6 @@ const formatMinutes = (mins) => {
 const formatDate = (dateStr) => {
   const d = new Date(dateStr + 'T00:00:00');
   return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-};
-
-// 'expired' reads as jargon to someone checking a code, so it's phrased as
-// what actually happened to them.
-const STATUS_LABELS = {
-  pending: 'Awaiting approval',
-  approved: 'Confirmed',
-  denied: 'Denied',
-  expired: 'Not reviewed in time',
-  canceled: 'Canceled',
-};
-
-const STATUS_STYLES = {
-  pending: 'bg-amber-100 text-amber-800',
-  approved: 'bg-emerald-100 text-emerald-800',
-  denied: 'bg-red-100 text-red-800',
-  expired: 'bg-surface-panel text-ink-body',
-  canceled: 'bg-surface-panel text-ink-body',
 };
 
 export default function ConfirmationCodePage() {
@@ -162,7 +145,7 @@ export default function ConfirmationCodePage() {
             <>
               <ScheduleResult schedule={booking} onChanged={refresh} />
 
-              {['pending', 'approved'].includes(booking.status) && (
+              {isLiveStatus(booking.status) && (
                 <div className="w-full">
                   {cancelError && (
                     <p className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm mb-3">
@@ -229,7 +212,7 @@ export default function ConfirmationCodePage() {
 
               {/* Cancelling is the only way a desk gets released when someone
                   decides to work from home instead. */}
-              {['pending', 'approved'].includes(booking.status) && (
+              {isLiveStatus(booking.status) && (
                 <div className="w-full mt-3">
                   {cancelError && (
                     <p className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm mb-3">

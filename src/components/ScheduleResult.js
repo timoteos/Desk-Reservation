@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { CalendarCheck, CalendarX } from 'lucide-react';
+import { CalendarCheck, CalendarX, CalendarOff } from 'lucide-react';
 import { cancelScheduleDay } from '../api/client';
+import { SCHEDULE_STATUS_LABELS, STATUS_STYLES, isLiveStatus } from '../lib/bookingStatus';
 
 const formatMinutes = (mins) => {
   const h = Math.floor(mins / 60);
@@ -51,7 +52,7 @@ export default function ScheduleResult({ schedule, onChanged }) {
   const [error, setError] = useState(null);
 
   const lines = describePattern(schedule.pattern);
-  const live = ['pending', 'approved'].includes(schedule.status);
+  const live = isLiveStatus(schedule.status);
 
   const cancelDay = async (occurrence) => {
     setBusyId(occurrence.id);
@@ -70,8 +71,14 @@ export default function ScheduleResult({ schedule, onChanged }) {
   return (
     <div className="flex flex-col gap-4 border-t border-surface-line pt-5">
       <div className="flex flex-col items-center gap-2 text-center">
-        <CalendarCheck className="w-10 h-10 text-mqd-title" />
-        <p className="text-mqd-title font-semibold">Recurring schedule found</p>
+        {live ? (
+          <CalendarCheck className="w-10 h-10 text-mqd-title" />
+        ) : (
+          <CalendarOff className="w-10 h-10 text-ink-muted" />
+        )}
+        <p className={`font-semibold ${live ? 'text-mqd-title' : 'text-ink-body'}`}>
+          {live ? 'Recurring schedule found' : 'This schedule is no longer running'}
+        </p>
       </div>
 
       <div className="bg-surface-page border border-surface-line rounded-lg p-4 text-sm text-ink-body w-full flex flex-col gap-1">
@@ -85,21 +92,32 @@ export default function ScheduleResult({ schedule, onChanged }) {
           </p>
         ))}
 
-        <p>
-          <span className="font-semibold text-mqd-title">Runs:</span>{' '}
-          {schedule.activeFrom ? longDate(schedule.activeFrom) : '—'}
-          {schedule.openEnded
-            ? ' onwards'
-            : schedule.activeUntil && ` to ${longDate(schedule.activeUntil)}`}
+        {schedule.activeFrom && (
+          <p>
+            <span className="font-semibold text-mqd-title">Runs:</span>{' '}
+            {longDate(schedule.activeFrom)}
+            {schedule.openEnded
+              ? ' onwards'
+              : schedule.activeUntil && ` to ${longDate(schedule.activeUntil)}`}
+          </p>
+        )}
+
+        <p className="flex items-center gap-2 pt-1">
+          <span className="font-semibold text-mqd-title">Status:</span>
+          <span className={`text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded ${STATUS_STYLES[schedule.status] || 'bg-surface-panel text-ink-body'}`}>
+            {SCHEDULE_STATUS_LABELS[schedule.status] || schedule.status}
+          </span>
         </p>
 
-        <p className="pt-1">
+        <p>
           <span className="font-semibold text-mqd-title">Code:</span>{' '}
           <span className="font-mono tracking-wider">{schedule.confirmationCode}</span>
         </p>
-        <p className="text-ink-muted text-xs">
-          One code for the whole schedule — the same one every day you come in.
-        </p>
+        {live && (
+          <p className="text-ink-muted text-xs">
+            One code for the whole schedule — the same one every day you come in.
+          </p>
+        )}
       </div>
 
       {schedule.today && (

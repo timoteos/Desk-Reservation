@@ -5,6 +5,7 @@ const {
   toTimestamps,
   generateConfirmationCode,
   toDateString,
+  toMinutes,
 } = require('../lib/reservationShape');
 const { expirePending, expiryFor } = require('../lib/expirePending');
 const { recordActivity } = require('../lib/activityLog');
@@ -112,8 +113,6 @@ const DAY_LABELS = {
   1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday',
 };
 
-const minutesOfDay = (ts) => new Date(ts).getHours() * 60 + new Date(ts).getMinutes();
-
 // A whole arrangement, found by the one code its holder was given.
 //
 // Returns null rather than throwing when the code is not a schedule code, so the
@@ -122,9 +121,19 @@ const minutesOfDay = (ts) => new Date(ts).getHours() * 60 + new Date(ts).getMinu
 // an edit is cancelled rather than deleted, and it should not show here.
 async function scheduleByCode(code) {
   const { rows } = await query(
-    `SELECT lead.schedule_id, lead.series_code, lead.status,
+    `SELECT lead.schedule_id, lead.series_code,
             u.first_name, u.last_name,
-            d.desk_number,
+            -- Status and desk come from the rows still standing, not from the row
+            -- that happens to hold the code.
+            --
+            -- A weekday dropped by an edit is cancelled rather than deleted, and
+            -- the code lives on the series' first row — so dropping that weekday
+            -- made a running schedule report itself cancelled, and kept its old
+            -- desk after a move. The admin list was fixed for exactly this and
+            -- this query was written afterwards without the same filter.
+            min(s.status) FILTER (WHERE s.status <> 'canceled')       AS status,
+            coalesce(min(d.desk_number) FILTER (WHERE s.status <> 'canceled'),
+                     min(d.desk_number))                              AS desk_number,
             min(s.active_from) FILTER (WHERE s.status <> 'canceled')  AS active_from,
             max(s.active_until) FILTER (WHERE s.status <> 'canceled') AS active_until,
             bool_or(s.active_until IS NULL) FILTER (WHERE s.status <> 'canceled') AS open_ended,
@@ -137,10 +146,9 @@ async function scheduleByCode(code) {
        FROM recurring_schedules lead
        JOIN recurring_schedules s ON s.series_id = lead.series_id
        JOIN users u ON u.user_id = lead.user_id
-       LEFT JOIN desks d ON d.desk_id = lead.desk_id
+       LEFT JOIN desks d ON d.desk_id = s.desk_id
       WHERE lead.series_code = $1
-      GROUP BY lead.schedule_id, lead.series_code, lead.status,
-               u.first_name, u.last_name, d.desk_number`,
+      GROUP BY lead.schedule_id, lead.series_code, u.first_name, u.last_name`,
     [code]
   );
 
@@ -164,8 +172,8 @@ async function scheduleByCode(code) {
   const shape = (o) => ({
     id: o.reservation_id,
     date: toDateString(o.starts_at),
-    startMin: minutesOfDay(o.starts_at),
-    endMin: minutesOfDay(o.ends_at),
+    startMin: toMinutes(o.starts_at),
+    endMin: toMinutes(o.ends_at),
     status: o.status,
   });
 
@@ -178,7 +186,9 @@ async function scheduleByCode(code) {
     confirmationCode: row.series_code,
     user: `${row.first_name} ${row.last_name}`,
     deskNumber: row.desk_number,
-    status: row.status,
+    // No live rows left means the whole arrangement is over, which is the one
+    // case where the filtered aggregate is null.
+    status: row.status ?? 'canceled',
     activeFrom: row.active_from ? toDateString(row.active_from) : null,
     activeUntil: row.open_ended || !row.active_until ? null : toDateString(row.active_until),
     openEnded: !!row.open_ended,
