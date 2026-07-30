@@ -326,6 +326,87 @@ router.patch('/reservations/:id', async (req, res, next) => {
   }
 });
 
+// PATCH /api/requests/schedules/:id/cancel
+//
+// Ends a recurring schedule and releases the bookings it still holds. A holder
+// has one confirmation code per occurrence and no way to end the pattern, so a
+// finished contract used to keep its desk until the horizon ran out.
+//
+// Only future bookings are touched. Occurrences already served are history and
+// cancelling them would rewrite what happened.
+router.patch('/schedules/:id/cancel', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // A Mon/Wed/Fri pattern is three schedule rows, so ending it means ending all
+    // of them. Siblings share user, desk and creation second — the same rule the
+    // approval route uses, so approving and ending agree on what one schedule is.
+    const { rows: siblings } = await client.query(
+      `SELECT s2.schedule_id, u.first_name, u.last_name
+         FROM recurring_schedules s1
+         JOIN recurring_schedules s2
+           ON s2.user_id = s1.user_id
+          AND s2.desk_id IS NOT DISTINCT FROM s1.desk_id
+          AND date_trunc('second', s2.created_at) = date_trunc('second', s1.created_at)
+         JOIN users u ON u.user_id = s2.user_id
+        WHERE s1.schedule_id = $1 AND s2.status <> 'canceled'`,
+      [req.params.id]
+    );
+
+    if (siblings.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        message: 'That schedule is no longer active — it may already have been ended.',
+      });
+    }
+
+    const scheduleIds = siblings.map((r) => r.schedule_id);
+    const schedule = siblings;
+
+    const { rowCount } = await client.query(
+      `UPDATE reservations
+          SET status = 'canceled', expires_at = NULL,
+              decided_by_user_id = $2, decided_at = now()
+        WHERE schedule_id = ANY($1::int[])
+          AND status IN ('pending', 'approved')
+          AND ends_at > now()`,
+      [scheduleIds, resolveDecider(req)]
+    );
+
+    // The schedules are closed off as well as their bookings, so nothing
+    // regenerates and the end date records when it actually stopped.
+    await client.query(
+      `UPDATE recurring_schedules
+          SET status = 'canceled', expires_at = NULL, active_until = CURRENT_DATE,
+              decided_by_user_id = $2, decided_at = now()
+        WHERE schedule_id = ANY($1::int[])`,
+      [scheduleIds, resolveDecider(req)]
+    );
+
+    await recordActivity({
+      activityType: 'series_ended',
+      scheduleId: Number(req.params.id),
+      actorUserId: resolveDecider(req),
+      metadata: { bookingsCanceled: rowCount, scheduleIds },
+      description: `Ended ${schedule[0].first_name} ${schedule[0].last_name}'s recurring schedule — `
+        + `${rowCount} upcoming booking(s) released`,
+    }, client);
+
+    await client.query('COMMIT');
+    res.json({
+      scheduleId: String(req.params.id),
+      schedulesEnded: scheduleIds.length,
+      bookingsCanceled: rowCount,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(err);
+  } finally {
+    client.release();
+  }
+});
+
 // PATCH /api/requests/reservations/:id/cancel
 //
 // The administrative override: cancel any live booking without needing the
