@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RotateCcw, CheckCircle2, Mail } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
-import { createRecurringSchedule } from '../api/client';
+import { createRecurringSchedule, getRecurringAvailability } from '../api/client';
+import DeskMap from '../components/DeskMap';
 import {
   OFFICE_START as OFFICE_START_MIN,
   OFFICE_END as OFFICE_END_MIN,
@@ -31,6 +32,12 @@ const formatDay = (dateStr) =>
       })
     : '';
 
+// "08:30" -> 510
+const toMinutes = (hhmm) => {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+};
+
 const todayValue = () => {
   const d = new Date();
   const pad = (n) => String(n).padStart(2, '0');
@@ -49,9 +56,49 @@ export default function RecurringSchedulePage() {
   // 90-day limit, which held a desk long past the point anyone would use it.
   const [activeFrom, setActiveFrom] = useState(todayValue());
   const [activeUntil, setActiveUntil] = useState('');
+  const [deskId, setDeskId] = useState(null);
+  const [availability, setAvailability] = useState(null);
+  const [loadingDesks, setLoadingDesks] = useState(false);
   const [result, setResult] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+
+  // Availability for a pattern is not a yes or a no — a desk taken on three of
+  // sixty-five days is neither free nor unusable — so it is refetched whenever
+  // the pattern changes and reported per desk as a count.
+  useEffect(() => {
+    const keys = Object.keys(schedule);
+    if (result || keys.length === 0) { setAvailability(null); return undefined; }
+
+    let cancelled = false;
+    setLoadingDesks(true);
+
+    const days = {};
+    keys.forEach((key) => {
+      days[key] = {
+        startMin: toMinutes(schedule[key].start),
+        endMin: toMinutes(schedule[key].end),
+      };
+    });
+
+    getRecurringAvailability({ days, activeFrom, ...(activeUntil ? { activeUntil } : {}) })
+      .then((data) => {
+        if (cancelled) return;
+        setAvailability(data);
+        // A desk that suited the previous pattern may suit this one badly, so a
+        // choice is dropped once it can host nothing.
+        setDeskId((current) => {
+          if (current == null) return null;
+          const still = data.desks.find((d) => d.deskId === current);
+          return still && still.bookable > 0 ? current : null;
+        });
+      })
+      .catch(() => { if (!cancelled) setAvailability(null); })
+      .finally(() => { if (!cancelled) setLoadingDesks(false); });
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(schedule), activeFrom, activeUntil, result]);
 
   const toggleDay = (key) => {
     setSchedule((prev) => {
@@ -77,12 +124,6 @@ export default function RecurringSchedulePage() {
   const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const canSubmit = selectedKeys.length > 0 && allValid && isValidEmail && !submitting;
 
-  // "08:30" -> 510
-  const toMinutes = (hhmm) => {
-    const [h, m] = hhmm.split(':').map(Number);
-    return h * 60 + m;
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!canSubmit) return;
@@ -104,6 +145,7 @@ export default function RecurringSchedulePage() {
         // Omitted rather than empty, so the server records that no end was
         // chosen instead of treating the fallback as a decision.
         ...(activeUntil ? { activeUntil } : {}),
+        ...(deskId != null ? { deskId } : {}),
       }));
     } catch (err) {
       setError(err.message);
@@ -291,9 +333,69 @@ export default function RecurringSchedulePage() {
                 />
               </div>
 
+              {/* Desk choice. Optional, because someone in for a week may not
+                  care — but the point of a recurring booking is a fixed
+                  arrangement, so whoever is here every day usually does. */}
+              {selectedKeys.length > 0 && (
+                <div>
+                  <p className="text-ink-body font-medium mb-1">
+                    Pick a desk <span className="text-ink-muted font-normal">— optional</span>
+                  </p>
+                  <p className="text-ink-muted text-xs mb-2">
+                    {availability
+                      ? `${availability.occurrences} booking${availability.occurrences === 1 ? '' : 's'} in this pattern. Amber desks are free for some of them, not all.`
+                      : 'Working out what each desk can offer…'}
+                  </p>
+
+                  <DeskMap
+                    desks={(availability?.desks ?? []).map((d) => ({
+                      id: d.deskId,
+                      number: d.deskNumber,
+                      label: `Desk# ${d.deskNumber}`,
+                      // Three states, because a pattern's availability is a
+                      // fraction rather than a yes or a no.
+                      status:
+                        d.bookable === 0 ? 'booked'
+                          : d.conflicts === 0 ? 'available'
+                            : 'partial',
+                    }))}
+                    selectedDeskId={deskId}
+                    onSelect={(desk) =>
+                      setDeskId((current) => (current === desk.id ? null : desk.id))
+                    }
+                    loading={loadingDesks}
+                    compact
+                  />
+
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-body mt-2">
+                    <span className="flex items-center gap-2">
+                      <span className="w-4 h-3 rounded bg-emerald-500" /> Free every day
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span className="w-4 h-3 rounded bg-amber-400" /> Free some days
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span className="w-4 h-3 rounded bg-rose-500" /> Taken every day
+                    </span>
+                  </div>
+
+                  <p className="text-ink-body text-sm mt-2">
+                    {(() => {
+                      const chosen = availability?.desks.find((d) => d.deskId === deskId);
+                      if (!chosen) return 'No desk chosen — one will be assigned for you.';
+                      const missing = chosen.occurrences - chosen.bookable;
+                      return missing === 0
+                        ? `Desk# ${chosen.deskNumber} — free for all ${chosen.occurrences} days.`
+                        : `Desk# ${chosen.deskNumber} — free for ${chosen.bookable} of ${chosen.occurrences} days. `
+                          + `The other ${missing} would be skipped.`;
+                    })()}
+                  </p>
+                </div>
+              )}
+
               <p className="text-ink-muted text-xs -mt-2">
-                Office hours are {OFFICE_HOURS_LABEL}, Monday through Friday. One desk is
-                assigned for the whole pattern.
+                Office hours are {OFFICE_HOURS_LABEL}, Monday through Friday. Without a
+                choice, the desk that fits the most days is assigned.
               </p>
 
               {error && (

@@ -75,6 +75,14 @@ export const createReservation = (payload) =>
     body: JSON.stringify(payload),
   });
 
+// What each desk could offer a pattern, before committing to it. A POST because
+// the pattern is the input and does not fit in a query string.
+export const getRecurringAvailability = (payload) =>
+  request('/api/recurring-schedules/availability', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
 export const createRecurringSchedule = (payload) =>
   request('/api/recurring-schedules', {
     method: 'POST',
