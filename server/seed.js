@@ -53,6 +53,18 @@ const isLocalDatabase = (url) => {
   }
 };
 
+// Host only — never the whole URL, which carries the password.
+const describeTarget = () => {
+  const url = process.env.DATABASE_URL;
+  if (!url) return 'local socket (no DATABASE_URL set)';
+  try {
+    const { hostname, pathname } = new URL(url);
+    return `${hostname || 'local socket'}${pathname}`;
+  } catch {
+    return 'unparseable DATABASE_URL';
+  }
+};
+
 function assertSafeTarget() {
   const url = process.env.DATABASE_URL;
   if (isLocalDatabase(url) || process.env.ALLOW_REMOTE_SEED === '1') return;
@@ -89,6 +101,10 @@ async function seed() {
   assertSafeTarget();
   const password = adminPassword();
 
+  // Name the target before emptying it. The guards above cover the cases they
+  // can test for; this covers the one they cannot — a correct-looking command
+  // pointed at the wrong database, which is only obvious to the person reading.
+  console.log(`Target:  ${describeTarget()}`);
   console.log(`Seeding ${MODE} fixtures (${USERS.length} people, @${dataset.domain})`);
 
   await query(
