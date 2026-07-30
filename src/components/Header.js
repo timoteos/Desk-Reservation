@@ -53,7 +53,7 @@ export default function Header() {
       {admin ? (
         <div className="flex items-center gap-2 shrink-0">
           {/* Name is supporting detail, so it drops first on narrow screens. */}
-          <span className="hidden lg:flex items-center gap-1.5 text-sm text-gray-500 max-w-[10rem] truncate">
+          <span className="hidden lg:flex items-center gap-1.5 text-sm text-ink-muted max-w-[10rem] truncate">
             <UserRound className="w-3.5 h-3.5 shrink-0" />
             {admin.name}
           </span>

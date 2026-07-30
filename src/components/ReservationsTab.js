@@ -20,7 +20,7 @@ const SOURCE_LABELS = {
 };
 
 const SOURCE_STYLES = {
-  user: 'bg-slate-100 text-slate-700',
+  user: 'bg-surface-panel text-ink-body',
   admin: 'bg-sky-100 text-sky-800',
   recurring: 'bg-indigo-100 text-indigo-800',
 };
@@ -107,16 +107,16 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
     : reservations;
 
   return (
-    <div className="bg-gray-200 rounded-2xl p-6">
+    <div className="bg-surface-panel border border-surface-line rounded-2xl p-6">
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-        <h1 className="text-2xl font-bold text-gray-800 tracking-wide">RESERVATIONS</h1>
-        <div className="flex rounded-lg border border-gray-300 overflow-hidden bg-white">
+        <h1 className="text-2xl font-bold text-ink ">Reservations</h1>
+        <div className="flex rounded-lg border border-surface-line overflow-hidden bg-white">
           {SCOPES.map((s) => (
             <button
               key={s.key}
               onClick={() => setScope(s.key)}
               className={`px-4 py-1.5 text-sm font-semibold transition
-                ${scope === s.key ? 'bg-mqd-btn text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+                ${scope === s.key ? 'bg-mqd-btn text-white' : 'text-ink-body hover:bg-surface-page'}`}
             >
               {s.label}
             </button>
@@ -125,13 +125,13 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
       </div>
 
       <div className="relative mb-4">
-        <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <Search className="w-4 h-4 text-ink-muted absolute left-3 top-1/2 -translate-y-1/2" />
         <input
           type="text"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           placeholder="Search by name, desk or code"
-          className="w-full bg-white border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+          className="w-full bg-white border border-surface-line rounded-lg pl-9 pr-3 py-2 text-sm text-ink-body focus:outline-none focus:ring-2 focus:ring-mqd-btn"
         />
       </div>
 
@@ -151,11 +151,11 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
       )}
 
       {loading ? (
-        <p className="text-gray-500 text-sm text-center py-10">Loading reservations…</p>
+        <p className="text-ink-muted text-sm text-center py-10">Loading reservations…</p>
       ) : shown.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-10 text-center">
-          <CalendarX className="w-9 h-9 text-gray-400" />
-          <p className="text-gray-600 text-sm">
+          <CalendarX className="w-9 h-9 text-ink-muted" />
+          <p className="text-ink-body text-sm">
             {term ? 'Nothing matches that search.' : `No ${scope === 'all' ? '' : scope} approved reservations.`}
           </p>
         </div>
@@ -166,16 +166,16 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-semibold text-gray-800">{r.user}</p>
-                    <span className={`text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded ${SOURCE_STYLES[r.bookingSource] || 'bg-gray-100 text-gray-600'}`}>
+                    <p className="font-semibold text-ink">{r.user}</p>
+                    <span className={`text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded ${SOURCE_STYLES[r.bookingSource] || 'bg-surface-panel text-ink-body'}`}>
                       {SOURCE_LABELS[r.bookingSource] || r.bookingSource}
                     </span>
                   </div>
-                  <p className="text-gray-500 text-sm mt-0.5">
+                  <p className="text-ink-muted text-sm mt-0.5">
                     {formatDate(r.date)} &middot; Desk# {r.deskNumber} &middot;{' '}
                     {formatMinutes(r.startMin)} - {formatMinutes(r.endMin)}
                   </p>
-                  <p className="font-mono text-xs text-gray-400 mt-1 select-all">Confirmation Code: {r.confirmationCode}</p>
+                  <p className="font-mono text-xs text-ink-muted mt-1 select-all">Confirmation Code: {r.confirmationCode}</p>
                 </div>
 
                 {isLive(r) && (
@@ -191,7 +191,7 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
                       <button
                         onClick={() => setConfirmingId(null)}
                         disabled={busyId === r.id}
-                        className="border border-gray-300 hover:bg-gray-50 disabled:opacity-40 text-gray-700 text-xs font-semibold px-3 py-1.5 rounded transition"
+                        className="border border-surface-line hover:bg-surface-page disabled:opacity-40 text-ink-body text-xs font-semibold px-3 py-1.5 rounded transition"
                       >
                         Keep
                       </button>
@@ -203,7 +203,7 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
                     <div className="flex gap-2 shrink-0">
                       <button
                         onClick={() => setEditing(r)}
-                        className="border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-semibold px-3 py-1.5 rounded transition flex items-center gap-1.5"
+                        className="border border-surface-line text-ink-body hover:bg-surface-page text-xs font-semibold px-3 py-1.5 rounded transition flex items-center gap-1.5"
                       >
                         <Pencil className="w-3 h-3" />
                         Edit
@@ -231,7 +231,7 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
         />
       )}
 
-      <p className="text-gray-500 text-xs mt-4">
+      <p className="text-ink-muted text-xs mt-4">
         Showing {shown.length} of {reservations.length}
         {scope === 'all' ? '' : ` ${scope}`} reservation{reservations.length === 1 ? '' : 's'}.
       </p>

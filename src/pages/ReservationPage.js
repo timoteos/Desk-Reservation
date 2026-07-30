@@ -55,30 +55,30 @@ export default function ReservationPage() {
     <>
       <Breadcrumb crumbs={CRUMBS} />
 
-      <div className="flex-1 flex flex-col items-center justify-center px-8 py-12 bg-gray-50">
-        <div className="w-full max-w-lg flex flex-col gap-6 bg-white rounded-xl shadow-md border border-gray-100 p-8 opacity-0 animate-fade-up">
+      <div className="flex-1 flex flex-col items-center justify-center px-8 py-12 bg-surface-page">
+        <div className="w-full max-w-lg flex flex-col gap-6 bg-white rounded-xl border border-surface-line p-8 opacity-0 animate-fade-up">
 
           <div>
             <h1 className="text-mqd-title text-2xl font-bold">Make a Reservation</h1>
-            <p className="text-gray-500 text-sm mt-1">Tell us what you need and we'll show you what's available.</p>
+            <p className="text-ink-muted text-sm mt-1">Tell us what you need and we'll show you what's available.</p>
           </div>
 
           {/* Reservation type toggle */}
           <div>
-            <p className="text-gray-700 font-medium mb-2">Reservation type</p>
-            <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+            <p className="text-ink-body font-medium mb-2">Reservation type</p>
+            <div className="flex rounded-lg border border-surface-line overflow-hidden">
               <button
                 onClick={() => { setType('hourly'); setCount(1); }}
                 className={`flex-1 py-3 text-sm font-semibold transition flex items-center justify-center gap-2
-                  ${type === 'hourly' ? 'bg-mqd-btn text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                  ${type === 'hourly' ? 'bg-mqd-btn text-white' : 'bg-white text-ink-body hover:bg-surface-page'}`}
               >
                 <Clock className="w-4 h-4" />
                 Hourly
               </button>
               <button
                 onClick={() => { setType('full'); setCount(1); }}
-                className={`flex-1 py-3 text-sm font-semibold transition border-l border-gray-300 flex items-center justify-center gap-2
-                  ${type === 'full' ? 'bg-mqd-btn text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                className={`flex-1 py-3 text-sm font-semibold transition border-l border-surface-line flex items-center justify-center gap-2
+                  ${type === 'full' ? 'bg-mqd-btn text-white' : 'bg-white text-ink-body hover:bg-surface-page'}`}
               >
                 <CalendarDays className="w-4 h-4" />
                 Full day(s)
@@ -88,14 +88,14 @@ export default function ReservationPage() {
 
           {/* Count stepper */}
           <div>
-            <p className="text-gray-700 font-medium mb-2">
+            <p className="text-ink-body font-medium mb-2">
               {type === 'full' ? 'Number of days' : 'Number of hours'}
             </p>
             <div className="flex items-center gap-4">
               <button
                 onClick={decrement}
                 disabled={count <= 1}
-                className="w-12 h-12 rounded-lg border border-gray-300 text-gray-700 text-xl font-bold hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition flex items-center justify-center"
+                className="w-12 h-12 rounded-lg border border-surface-line text-ink-body text-xl font-bold hover:bg-surface-panel disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition flex items-center justify-center"
               >
                 −
               </button>
@@ -103,11 +103,11 @@ export default function ReservationPage() {
               <button
                 onClick={increment}
                 disabled={count >= maxCount}
-                className="w-12 h-12 rounded-lg border border-gray-300 text-gray-700 text-xl font-bold hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition flex items-center justify-center"
+                className="w-12 h-12 rounded-lg border border-surface-line text-ink-body text-xl font-bold hover:bg-surface-panel disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition flex items-center justify-center"
               >
                 +
               </button>
-              <span className="text-gray-400 text-sm">
+              <span className="text-ink-muted text-sm">
                 {type === 'full'
                   ? 'full workday — book each day separately'
                   : 'hour(s)'}
@@ -117,40 +117,40 @@ export default function ReservationPage() {
 
           {/* No earlier than */}
           <div>
-            <p className="text-gray-700 font-medium mb-2">
-              No earlier than <span className="text-gray-400 font-normal">(optional)</span>
+            <p className="text-ink-body font-medium mb-2">
+              No earlier than <span className="text-ink-muted font-normal">(optional)</span>
             </p>
             <input
               type="date"
               value={noEarlierThan}
               min={today}
               onChange={(e) => setNoEarlierThan(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+              className="w-full border border-surface-line rounded-lg px-4 py-3 text-ink-body text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
             />
           </div>
 
           {/* Desk choice */}
           <div>
-            <p className="text-gray-700 font-medium mb-2">Desk</p>
-            <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+            <p className="text-ink-body font-medium mb-2">Desk</p>
+            <div className="flex rounded-lg border border-surface-line overflow-hidden">
               <button
                 onClick={() => setDeskChoice('pick')}
                 className={`flex-1 py-3 text-sm font-semibold transition flex items-center justify-center gap-2
-                  ${deskChoice === 'pick' ? 'bg-mqd-btn text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                  ${deskChoice === 'pick' ? 'bg-mqd-btn text-white' : 'bg-white text-ink-body hover:bg-surface-page'}`}
               >
                 <LayoutGrid className="w-4 h-4" />
                 I'll choose
               </button>
               <button
                 onClick={() => setDeskChoice('auto')}
-                className={`flex-1 py-3 text-sm font-semibold transition border-l border-gray-300 flex items-center justify-center gap-2
-                  ${deskChoice === 'auto' ? 'bg-mqd-btn text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                className={`flex-1 py-3 text-sm font-semibold transition border-l border-surface-line flex items-center justify-center gap-2
+                  ${deskChoice === 'auto' ? 'bg-mqd-btn text-white' : 'bg-white text-ink-body hover:bg-surface-page'}`}
               >
                 <Shuffle className="w-4 h-4" />
                 Assign me one
               </button>
             </div>
-            <p className="text-gray-400 text-xs mt-2">
+            <p className="text-ink-muted text-xs mt-2">
               {deskChoice === 'pick'
                 ? 'Pick your desk from the office floor plan.'
                 : 'Skip the floor plan — any free desk is assigned for you.'}

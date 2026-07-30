@@ -72,7 +72,7 @@ const LEGEND = [
 
 export function DeskMapLegend({ showCurrent = false, className = '' }) {
   return (
-    <div className={`flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-700 ${className}`}>
+    <div className={`flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-body ${className}`}>
       {LEGEND.filter((item) => showCurrent || !item.onlyWithCurrent).map((item) => (
         <div key={item.label} className="flex items-center gap-2">
           <div className={`w-4 h-3 rounded ${item.color}`} />
@@ -97,12 +97,12 @@ export default function DeskMap({
       <img
         src={`${process.env.PUBLIC_URL}/office-map.png`}
         alt="Office floor plan"
-        className="block w-full h-auto rounded-lg border border-gray-200"
+        className="block w-full h-auto rounded-lg border border-surface-line"
       />
 
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/60 rounded-lg">
-          <p className="text-gray-600 text-sm font-medium">Checking desk availability…</p>
+          <p className="text-ink-body text-sm font-medium">Checking desk availability…</p>
         </div>
       )}
 

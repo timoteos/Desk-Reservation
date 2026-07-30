@@ -116,19 +116,19 @@ export default function EditReservationModal({ reservation, onClose, onSaved }) 
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-start justify-center z-50 px-4 py-8 overflow-y-auto" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-2xl p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-modal w-full max-w-2xl p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4 mb-1">
           <div>
             <h2 className="text-xl font-bold text-mqd-title">Edit reservation</h2>
-            <p className="text-gray-500 text-sm mt-0.5">{reservation.user}</p>
+            <p className="text-ink-muted text-sm mt-0.5">{reservation.user}</p>
           </div>
-          <button onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-gray-600 transition">
+          <button onClick={onClose} aria-label="Close" className="text-ink-muted hover:text-ink-body transition">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* What it is now, so it's clear what's being changed from. */}
-        <p className="text-gray-600 text-sm bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 mb-4">
+        <p className="text-ink-body text-sm bg-surface-page border border-surface-line rounded-lg px-3 py-2 mb-4">
           Currently {formatDate(reservation.date)} &middot; Desk# {reservation.deskNumber} &middot;{' '}
           {formatMinutes(reservation.startMin)} – {formatMinutes(reservation.endMin)}
         </p>
@@ -141,24 +141,24 @@ export default function EditReservationModal({ reservation, onClose, onSaved }) 
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
           <label className="text-sm">
-            <span className="block text-gray-700 font-medium mb-1">Date</span>
+            <span className="block text-ink-body font-medium mb-1">Date</span>
             <input
               type="date"
               value={date}
               min={todayValue()}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+              className="w-full border border-surface-line rounded-lg px-3 py-2 text-ink-body focus:outline-none focus:ring-2 focus:ring-mqd-btn"
             />
           </label>
           {/* Selects rather than time inputs: a time input's min/max are only
               validation hints, so an out-of-hours time could still be typed. A
               select cannot hold a value that was never offered. */}
           <label className="text-sm">
-            <span className="block text-gray-700 font-medium mb-1">From</span>
+            <span className="block text-ink-body font-medium mb-1">From</span>
             <select
               value={startMin}
               onChange={(e) => handleStartChange(Number(e.target.value))}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+              className="w-full border border-surface-line rounded-lg px-3 py-2 text-ink-body bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
             >
               {timeOptions({ to: OFFICE_END - SLOT_MINUTES }).map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
@@ -166,11 +166,11 @@ export default function EditReservationModal({ reservation, onClose, onSaved }) 
             </select>
           </label>
           <label className="text-sm">
-            <span className="block text-gray-700 font-medium mb-1">To</span>
+            <span className="block text-ink-body font-medium mb-1">To</span>
             <select
               value={endMin}
               onChange={(e) => setEndMin(Number(e.target.value))}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+              className="w-full border border-surface-line rounded-lg px-3 py-2 text-ink-body bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
             >
               {/* Starts one slot after the chosen start, so an end at or before
                   it is not an error to recover from — it cannot be picked. */}
@@ -181,7 +181,7 @@ export default function EditReservationModal({ reservation, onClose, onSaved }) 
           </label>
         </div>
 
-        <p className="text-gray-500 text-xs mb-4">
+        <p className="text-ink-muted text-xs mb-4">
           Office hours are {OFFICE_HOURS_LABEL}, Monday to Friday, in {SLOT_MINUTES}-minute blocks.
         </p>
 
@@ -191,7 +191,7 @@ export default function EditReservationModal({ reservation, onClose, onSaved }) 
           </p>
         )}
 
-        <p className="text-gray-700 text-sm font-medium mb-2">
+        <p className="text-ink-body text-sm font-medium mb-2">
           Pick a desk for {formatMinutes(startMin)} – {formatMinutes(endMin)}
         </p>
 
@@ -205,7 +205,7 @@ export default function EditReservationModal({ reservation, onClose, onSaved }) 
 
         <div className="flex items-center justify-between gap-3 mt-3 flex-wrap">
           <DeskMapLegend showCurrent />
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-ink-body">
             {selectedDesk ? `Selected: Desk# ${selectedDesk.number}` : 'No desk selected'}
           </p>
         </div>
@@ -228,7 +228,7 @@ export default function EditReservationModal({ reservation, onClose, onSaved }) 
           <button
             onClick={onClose}
             disabled={saving}
-            className="px-5 border border-gray-300 hover:bg-gray-50 disabled:opacity-40 text-gray-700 font-semibold rounded-lg transition"
+            className="px-5 border border-surface-line hover:bg-surface-page disabled:opacity-40 text-ink-body font-semibold rounded-lg transition"
           >
             Cancel
           </button>

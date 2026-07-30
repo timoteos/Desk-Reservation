@@ -76,15 +76,15 @@ export default function UserConfirmationPage() {
     <>
       <Breadcrumb crumbs={crumbsFor(autoAssign)} />
 
-      <div className="flex-1 flex flex-col items-center justify-center px-8 py-12 bg-gray-50">
-        <div className="w-full max-w-lg flex flex-col gap-6 bg-white rounded-xl shadow-md border border-gray-100 p-8 opacity-0 animate-fade-up">
+      <div className="flex-1 flex flex-col items-center justify-center px-8 py-12 bg-surface-page">
+        <div className="w-full max-w-lg flex flex-col gap-6 bg-white rounded-xl border border-surface-line p-8 opacity-0 animate-fade-up">
 
           <div className="text-center">
             <h1 className="text-mqd-title text-2xl font-bold">Confirm Your Reservation</h1>
-            <p className="text-gray-500 text-sm mt-1">Review the details below and enter your email to request this desk.</p>
+            <p className="text-ink-muted text-sm mt-1">Review the details below and enter your email to request this desk.</p>
           </div>
 
-          <div className="bg-gray-50 border border-gray-100 rounded-lg p-5 text-center text-sm text-gray-700 space-y-1">
+          <div className="bg-surface-page border border-surface-line rounded-lg p-5 text-center text-sm text-ink-body space-y-1">
             <p>
               <span className="font-semibold text-mqd-title">Desk:</span>{' '}
               {confirmation
@@ -104,24 +104,24 @@ export default function UserConfirmationPage() {
             <div className="flex flex-col items-center gap-3 text-center py-4">
               <CheckCircle2 className="w-10 h-10 text-mqd-title" />
               <p className="text-mqd-title font-semibold">Request submitted</p>
-              <p className="text-gray-500 text-sm">
+              <p className="text-ink-muted text-sm">
                 An administrator will review it. Requests not reviewed within 24
                 hours are released so the desk doesn't stay held.
               </p>
               <div className="bg-mqd-btn/10 border border-mqd-btn/20 rounded-lg px-6 py-4 w-full">
-                <p className="text-gray-500 text-xs uppercase tracking-wide mb-1">Confirmation code</p>
+                <p className="text-ink-muted text-xs uppercase tracking-wide mb-1">Confirmation code</p>
                 <p className="text-mqd-title text-2xl font-bold tracking-[0.15em] font-mono">
                   {confirmation.confirmationCode}
                 </p>
               </div>
-              <p className="text-gray-500 text-sm">
+              <p className="text-ink-muted text-sm">
                 Keep this code — you can use it to look up your reservation.
               </p>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div>
-                <label htmlFor="email" className="text-gray-700 font-medium mb-2 flex items-center gap-2">
+                <label htmlFor="email" className="text-ink-body font-medium mb-2 flex items-center gap-2">
                   <Mail className="w-4 h-4" />
                   Email
                 </label>
@@ -132,7 +132,7 @@ export default function UserConfirmationPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@dhs.hawaii.gov"
                   required
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                  className="w-full border border-surface-line rounded-lg px-4 py-3 text-ink-body text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
                 />
               </div>
 

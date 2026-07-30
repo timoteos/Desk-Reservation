@@ -89,36 +89,36 @@ function UserDetailModal({ user, onClose }) {
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-lg w-full max-w-md p-6 relative"
+        className="bg-white rounded-xl shadow-modal w-full max-w-md p-6 relative"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={onClose}
           aria-label="Close"
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 transition"
+          className="absolute top-4 right-4 text-ink-muted hover:text-ink-body transition"
         >
           <X className="w-5 h-5" />
         </button>
 
         <h2 className="text-mqd-title text-xl font-bold mb-1">{user.name}</h2>
-        <p className="text-gray-500 text-sm mb-5">
+        <p className="text-ink-muted text-sm mb-5">
           Upcoming approved reservations. Requests awaiting a decision appear
           under Requests, not here.
         </p>
 
         {loading ? (
-          <p className="text-gray-400 text-sm text-center py-8">Loading reservations…</p>
+          <p className="text-ink-muted text-sm text-center py-8">Loading reservations…</p>
         ) : reservations.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-8 text-center">
-            <CalendarClock className="w-9 h-9 text-gray-300" />
-            <p className="text-gray-500 text-sm">No upcoming reservations.</p>
+            <CalendarClock className="w-9 h-9 text-mqd-200" />
+            <p className="text-ink-muted text-sm">No upcoming reservations.</p>
           </div>
         ) : (
           <div className="flex flex-col gap-3 max-h-80 overflow-y-auto pr-1">
             {reservations.map((r) => (
-              <div key={r.id} className="border border-gray-200 rounded-lg p-4 text-sm">
-                <p className="font-semibold text-gray-800">{formatDate(r.date)}</p>
-                <p className="text-gray-500">
+              <div key={r.id} className="border border-surface-line rounded-lg p-4 text-sm">
+                <p className="font-semibold text-ink">{formatDate(r.date)}</p>
+                <p className="text-ink-muted">
                   Desk# {r.deskNumber} &middot; {formatMinutes(r.startMin)} - {formatMinutes(r.endMin)}
                 </p>
                 {/* Shown so an admin can give someone their code back when
@@ -126,7 +126,7 @@ function UserDetailModal({ user, onClose }) {
                     into an email or chat rather than read aloud. */}
                 <CopyableCode code={r.confirmationCode} />
 
-                <p className="text-gray-400 text-xs mt-1.5 flex items-center gap-1">
+                <p className="text-ink-muted text-xs mt-1.5 flex items-center gap-1">
                   <Check className="w-3 h-3 shrink-0" />
                   {r.approvedBy ? `Approved by ${r.approvedBy}` : 'Approved'}
                   {r.approvedAt && ` · ${formatDate(r.approvedAt.split('T')[0])}`}
@@ -145,7 +145,7 @@ function UserDetailModal({ user, onClose }) {
 const ROLE_STYLES = {
   admin: 'bg-sky-100 text-sky-800',
   guest: 'bg-amber-100 text-amber-800',
-  member: 'bg-slate-100 text-slate-700',
+  member: 'bg-surface-panel text-ink-body',
 };
 
 function MainTab({ users, selectedUserId, onSelectUser }) {
@@ -160,32 +160,32 @@ function MainTab({ users, selectedUserId, onSelectUser }) {
     : users;
 
   return (
-    <div className="bg-gray-200 rounded-2xl p-6">
+    <div className="bg-surface-panel border border-surface-line rounded-2xl p-6">
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-        <h1 className="text-2xl font-bold text-gray-800 tracking-wide">USERS</h1>
+        <h1 className="text-2xl font-bold text-ink ">Users</h1>
         <button
           aria-label="Add user"
-          className="w-9 h-9 rounded-lg bg-white border border-gray-300 flex items-center justify-center hover:bg-gray-50 transition"
+          className="w-9 h-9 rounded-lg bg-white border border-surface-line flex items-center justify-center hover:bg-surface-page transition"
         >
-          <Plus className="w-4 h-4 text-gray-700" />
+          <Plus className="w-4 h-4 text-ink-body" />
         </button>
       </div>
 
       <div className="relative mb-4">
-        <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+        <Search className="w-4 h-4 text-ink-muted absolute left-3 top-1/2 -translate-y-1/2" />
         <input
           type="text"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           placeholder="Search by name or email"
-          className="w-full bg-white border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+          className="w-full bg-white border border-surface-line rounded-lg pl-9 pr-3 py-2 text-sm text-ink-body focus:outline-none focus:ring-2 focus:ring-mqd-btn"
         />
       </div>
 
       {shown.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-10 text-center">
-          <Users className="w-9 h-9 text-gray-400" />
-          <p className="text-gray-600 text-sm">
+          <Users className="w-9 h-9 text-ink-muted" />
+          <p className="text-ink-body text-sm">
             {term ? 'Nothing matches that search.' : 'No users yet.'}
           </p>
         </div>
@@ -197,23 +197,23 @@ function MainTab({ users, selectedUserId, onSelectUser }) {
               <button
                 key={user.id}
                 onClick={() => onSelectUser(user)}
-                className={`bg-white rounded-lg p-3.5 text-left transition hover:bg-gray-50
+                className={`bg-white rounded-lg p-3.5 text-left transition hover:bg-surface-page
                   ${isSelected ? 'ring-2 ring-mqd-btn' : ''}`}
               >
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-semibold text-gray-800">{user.name}</p>
-                  <span className={`text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded ${ROLE_STYLES[user.role] || 'bg-gray-100 text-gray-600'}`}>
+                  <p className="font-semibold text-ink">{user.name}</p>
+                  <span className={`text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded ${ROLE_STYLES[user.role] || 'bg-surface-panel text-ink-body'}`}>
                     {user.role}
                   </span>
                 </div>
-                <p className="text-gray-500 text-sm mt-0.5">{user.email}</p>
+                <p className="text-ink-muted text-sm mt-0.5">{user.email}</p>
               </button>
             );
           })}
         </div>
       )}
 
-      <p className="text-gray-500 text-xs mt-4">
+      <p className="text-ink-muted text-xs mt-4">
         Showing {shown.length} of {users.length} user{users.length === 1 ? '' : 's'}.
         {' '}Select someone to see their reservations.
       </p>
@@ -240,27 +240,27 @@ function RequestCard({ request, onDecide, busy }) {
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-semibold text-gray-800">{request.name}</p>
+            <p className="font-semibold text-ink">{request.name}</p>
             {request.role === 'guest' && (
               <span className="text-xs font-semibold uppercase tracking-wide text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
                 Guest
               </span>
             )}
-            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+            <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted bg-surface-panel px-2 py-0.5 rounded">
               {isRecurring ? 'Recurring' : 'One-off'}
             </span>
           </div>
-          <p className="text-gray-500 text-xs mt-0.5">{request.email}</p>
+          <p className="text-ink-muted text-xs mt-0.5">{request.email}</p>
         </div>
         {remaining && (
-          <span className="text-xs text-gray-500 whitespace-nowrap">{remaining}</span>
+          <span className="text-xs text-ink-muted whitespace-nowrap">{remaining}</span>
         )}
       </div>
 
-      <div className="text-sm text-gray-700">
+      <div className="text-sm text-ink-body">
         {isRecurring ? (
           <>
-            <p className="text-gray-500 text-xs mb-1">
+            <p className="text-ink-muted text-xs mb-1">
               Desk# {request.deskNumber} &middot; {request.bookingCount} bookings
             </p>
             {request.pattern.map((p) => (
@@ -273,7 +273,7 @@ function RequestCard({ request, onDecide, busy }) {
         ) : (
           <>
             <p className="font-medium">{formatDate(request.date)}</p>
-            <p className="text-gray-500">
+            <p className="text-ink-muted">
               Desk# {request.deskNumber} &middot; {formatMinutes(request.startMin)} -{' '}
               {formatMinutes(request.endMin)}
             </p>
@@ -293,7 +293,7 @@ function RequestCard({ request, onDecide, busy }) {
         <button
           disabled={busy}
           onClick={() => onDecide(request, 'denied')}
-          className="flex-1 bg-white border border-gray-300 hover:bg-gray-50 disabled:opacity-40 text-gray-700 text-sm font-semibold py-2 rounded transition flex items-center justify-center gap-1.5"
+          className="flex-1 bg-white border border-surface-line hover:bg-surface-page disabled:opacity-40 text-ink-body text-sm font-semibold py-2 rounded transition flex items-center justify-center gap-1.5"
         >
           <X className="w-4 h-4" />
           Deny
@@ -306,15 +306,15 @@ function RequestCard({ request, onDecide, busy }) {
 function RequestsTab({ requests, loading, error, onDecide, busyId }) {
   if (loading) {
     return (
-      <div className="bg-gray-200 rounded-2xl p-6 min-h-[300px] flex items-center justify-center">
-        <p className="text-gray-500 text-sm">Loading requests…</p>
+      <div className="bg-surface-panel border border-surface-line rounded-2xl p-6 min-h-[300px] flex items-center justify-center">
+        <p className="text-ink-muted text-sm">Loading requests…</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-gray-200 rounded-2xl p-6 min-h-[300px] flex items-center justify-center text-center">
+      <div className="bg-surface-panel border border-surface-line rounded-2xl p-6 min-h-[300px] flex items-center justify-center text-center">
         <p className="text-red-600 text-sm">{error}</p>
       </div>
     );
@@ -322,10 +322,10 @@ function RequestsTab({ requests, loading, error, onDecide, busyId }) {
 
   if (requests.length === 0) {
     return (
-      <div className="bg-gray-200 rounded-2xl p-6 min-h-[300px] flex flex-col items-center justify-center gap-2 text-center">
-        <Inbox className="w-10 h-10 text-gray-400" />
-        <h2 className="text-lg font-semibold text-gray-700">Nothing awaiting approval</h2>
-        <p className="text-gray-500 text-sm max-w-sm">
+      <div className="bg-surface-panel border border-surface-line rounded-2xl p-6 min-h-[300px] flex flex-col items-center justify-center gap-2 text-center">
+        <Inbox className="w-10 h-10 text-ink-muted" />
+        <h2 className="text-lg font-semibold text-ink-body">Nothing awaiting approval</h2>
+        <p className="text-ink-muted text-sm max-w-sm">
           New desk requests appear here. Unanswered requests lapse after 24 hours
           so they don't hold a desk indefinitely.
         </p>
@@ -334,8 +334,8 @@ function RequestsTab({ requests, loading, error, onDecide, busyId }) {
   }
 
   return (
-    <div className="bg-gray-200 rounded-2xl p-6">
-      <h1 className="text-2xl font-bold text-gray-800 tracking-wide mb-5">
+    <div className="bg-surface-panel border border-surface-line rounded-2xl p-6">
+      <h1 className="text-2xl font-bold text-ink tracking-wide mb-5">
         PENDING REQUESTS
       </h1>
       <div className="flex flex-col gap-3">
@@ -423,8 +423,8 @@ export default function AdminDashboardPage() {
                 onClick={() => setActiveTab(tab.key)}
                 className={`flex items-center gap-2 px-4 py-2 rounded-t-lg text-sm font-semibold transition
                   ${isActive
-                    ? 'bg-gray-300 text-gray-900'
-                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                    ? 'bg-surface-line text-ink'
+                    : 'bg-surface-panel text-ink-muted hover:bg-surface-panel'}`}
               >
                 <Icon className="w-4 h-4" />
                 {tab.label}
@@ -452,7 +452,7 @@ export default function AdminDashboardPage() {
 
         {activeTab === 'users' && (
           usersError ? (
-            <div className="bg-gray-200 rounded-2xl p-6 min-h-[200px] flex items-center justify-center text-center">
+            <div className="bg-surface-panel border border-surface-line rounded-2xl p-6 min-h-[200px] flex items-center justify-center text-center">
               <p className="text-red-600 text-sm">{usersError}</p>
             </div>
           ) : (

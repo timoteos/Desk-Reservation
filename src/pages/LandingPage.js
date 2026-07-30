@@ -73,7 +73,7 @@ export default function LandingPage() {
 
       {/* Feature row */}
       <div className="flex-1 flex flex-col items-center px-8 py-12 gap-10">
-        <p className="text-gray-600 text-sm text-center max-w-2xl">
+        <p className="text-ink-body text-sm text-center max-w-2xl">
           A sleek MQD application that lets users quickly browse availability, reserve hotel desks,
           and manage their workspace bookings with ease.
         </p>
@@ -87,7 +87,7 @@ export default function LandingPage() {
             >
               <div className="text-4xl flex items-center justify-center h-10 text-mqd-title">{f.icon}</div>
               <h3 className="text-mqd-title font-semibold">{f.title}</h3>
-              <p className="text-gray-500 text-sm">{f.desc}</p>
+              <p className="text-ink-muted text-sm">{f.desc}</p>
             </div>
           ))}
         </div>

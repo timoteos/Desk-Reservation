@@ -9,15 +9,15 @@ export default function Footer() {
         {/* Contact info */}
         <div className="text-sm space-y-1.5">
           <p className="font-semibold">Contact us:</p>
-          <p className="flex items-center gap-2 text-gray-300">
+          <p className="flex items-center gap-2 text-mqd-200">
             <Mail className="w-4 h-4 shrink-0" />
             tsumalinog-int@dhs.hawaii.gov
           </p>
-          <p className="flex items-center gap-2 text-gray-300">
+          <p className="flex items-center gap-2 text-mqd-200">
             <Phone className="w-4 h-4 shrink-0" />
             1(800) 316-8005
           </p>
-          <p className="flex items-start gap-2 text-gray-300">
+          <p className="flex items-start gap-2 text-mqd-200">
             <MapPin className="w-4 h-4 shrink-0 mt-0.5" />
             <span>
               Kakuhihewa State Office Building
@@ -43,7 +43,7 @@ export default function Footer() {
       </div>
 
       <div className="border-t border-white/10 py-3 px-8">
-        <p className="text-xs text-gray-400 tracking-wide">
+        <p className="text-xs text-ink-on-dark tracking-wide">
           2024 STATE OF HAWAII MED-QUEST DIVISION ALL RIGHTS RESERVED
         </p>
       </div>

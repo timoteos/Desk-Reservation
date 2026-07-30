@@ -38,7 +38,7 @@ export default function RequireAdmin({ children }) {
   if (state === 'checking') {
     return (
       <div className="flex-1 flex items-center justify-center py-20">
-        <p className="text-gray-500 text-sm">Checking your session…</p>
+        <p className="text-ink-muted text-sm">Checking your session…</p>
       </div>
     );
   }
