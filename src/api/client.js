@@ -55,6 +55,10 @@ export const getAllReservations = (scope = 'upcoming') =>
 export const adminCancelReservation = (id) =>
   request(`/api/requests/reservations/${encodeURIComponent(id)}/cancel`, { method: 'PATCH' });
 
+// Ends a recurring schedule and releases the bookings it still holds.
+export const adminCancelSeries = (scheduleId) =>
+  request(`/api/requests/schedules/${encodeURIComponent(scheduleId)}/cancel`, { method: 'PATCH' });
+
 // Moves a booking to a different desk, time, or both. Send only what changed.
 export const adminEditReservation = (id, changes) =>
   request(`/api/requests/reservations/${encodeURIComponent(id)}`, {

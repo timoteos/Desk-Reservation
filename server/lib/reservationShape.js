@@ -21,6 +21,11 @@ const rowToReservation = (row) => ({
   status: row.status,
   confirmationCode: row.confirmation_code,
   bookingSource: row.booking_source,
+  // Present only on recurring occurrences. scheduleId is the single weekday this
+  // booking came from; seriesId identifies the whole submission, which is what
+  // the interface groups on so a Mon/Wed/Fri pattern reads as one entry.
+  scheduleId: row.schedule_id != null ? String(row.schedule_id) : null,
+  seriesId: row.series_id != null ? String(row.series_id) : null,
   user: row.first_name ? `${row.first_name} ${row.last_name}` : undefined,
   userId: row.user_id,
   deskNumber: row.desk_number,

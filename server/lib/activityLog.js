@@ -14,6 +14,9 @@ const ACTIVITIES = {
   // One entry per edit, even when the desk and the time both change — that was
   // one decision by one person, and splitting it would read as two.
   modified: 'Edited by an administrator',
+  // One entry for the whole series, as with the request that created it. Dozens
+  // of identical cancellations would bury everything else in the trail.
+  series_ended: 'Recurring schedule ended',
   expired: 'Request expired unreviewed',
   schedule_requested: 'Recurring schedule requested',
 };
