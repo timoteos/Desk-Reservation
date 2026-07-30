@@ -13,6 +13,11 @@ export const OFFICE_START = 450;  // 7:30 AM, in minutes from midnight
 export const OFFICE_END = 1020;   // 5:00 PM
 export const SLOT_MINUTES = 30;   // bookings start and end on the half hour
 
+// Bookings close this many minutes before a slot begins: an 11:00 desk can be
+// claimed at 10:55 but not at 10:56. Mirrored in server/lib/officeHours.js,
+// which is the copy that actually enforces it.
+export const BOOKING_LEAD_MINUTES = 5;
+
 export const MINS_IN_WORKDAY = OFFICE_END - OFFICE_START;
 
 export const formatMinutes = (mins) => {
@@ -77,7 +82,11 @@ export const earliestStartOn = (dateStr) => {
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
   if (nowMin < OFFICE_START) return OFFICE_START;
-  return Math.floor(nowMin / SLOT_MINUTES) * SLOT_MINUTES + SLOT_MINUTES;
+
+  // The first slot boundary at least BOOKING_LEAD_MINUTES away. Rounding up from
+  // now + lead rather than stepping to the next boundary is what closes the
+  // 11:00 slot at 10:56 instead of at 11:00 exactly.
+  return Math.ceil((nowMin + BOOKING_LEAD_MINUTES) / SLOT_MINUTES) * SLOT_MINUTES;
 };
 
 // Whether a window can still be booked at all. Decides what the interface

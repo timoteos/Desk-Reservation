@@ -9,7 +9,7 @@ const {
 } = require('../lib/reservationShape');
 const { expirePending, expiryFor } = require('../lib/expirePending');
 const { recordActivity } = require('../lib/activityLog');
-const { officeHoursError, workingDayError } = require('../lib/officeHours');
+const { tooSoonError, officeHoursError, workingDayError } = require('../lib/officeHours');
 const { bookableDeskError } = require('../lib/deskGuard');
 const { endSeries } = require('../lib/endSeries');
 
@@ -393,11 +393,8 @@ router.post('/', async (req, res, next) => {
     // A booking in the past would get an expires_at already behind us and be
     // swept the moment it's created, so refuse it here with a real reason
     // rather than letting it vanish silently.
-    if (startsAt <= new Date()) {
-      return res.status(400).json({
-        message: 'That time has already passed. Pick a later slot.',
-      });
-    }
+    const timingProblem = tooSoonError(startsAt);
+    if (timingProblem) return res.status(400).json({ message: timingProblem });
 
     if (deskId != null) {
       const deskProblem = await bookableDeskError(deskId);

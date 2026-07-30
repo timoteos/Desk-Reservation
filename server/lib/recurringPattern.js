@@ -1,4 +1,4 @@
-const { officeHoursError } = require('./officeHours');
+const { officeHoursError, tooSoonError } = require('./officeHours');
 
 // Occurrences have to exist as real rows: the exclusion constraint can only see
 // rows, so a schedule that computed its occurrences on the fly would get no
@@ -96,10 +96,13 @@ function planPattern({ days, activeFrom, activeUntil }) {
 
     for (const date of occurrencesFor([DAY_NUMBERS[dayKey]], from, to)) {
       const startsAt = atTime(date, times.startMin);
-      // Skip an occurrence whose time has already passed today — otherwise a
+      // Skip an occurrence that can no longer be claimed today — otherwise a
       // Monday pattern submitted on Monday afternoon generates a slot for that
-      // morning, and expiry lands in the past, killing the whole request.
-      if (startsAt <= new Date()) continue;
+      // morning, and expiry lands in the past, killing the whole request. The
+      // same lead time the one-off routes enforce, so a pattern cannot quietly
+      // create an occurrence a person would be refused if they asked for it
+      // directly.
+      if (tooSoonError(startsAt)) continue;
       slots.push({
         dayKey,
         dayNumber: DAY_NUMBERS[dayKey],
