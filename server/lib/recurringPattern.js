@@ -1,4 +1,3 @@
-const { query } = require('../db');
 const { officeHoursError } = require('./officeHours');
 
 // Occurrences have to exist as real rows: the exclusion constraint can only see

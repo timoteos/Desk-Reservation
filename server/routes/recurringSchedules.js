@@ -1,5 +1,5 @@
 const express = require('express');
-const { pool, query } = require('../db');
+const { pool } = require('../db');
 const { generateConfirmationCode, toDateString } = require('../lib/reservationShape');
 const { expiryFor } = require('../lib/expirePending');
 const { recordActivity } = require('../lib/activityLog');

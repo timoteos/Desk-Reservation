@@ -1,7 +1,14 @@
 const express = require('express');
-const { query } = require('../db');
+const { pool, query } = require('../db');
 const { requireAdmin } = require('../lib/auth');
-const { toDateString } = require('../lib/reservationShape');
+const { toDateString, generateConfirmationCode } = require('../lib/reservationShape');
+const { recordActivity } = require('../lib/activityLog');
+const {
+  DAY_NUMBERS,
+  minutesToTime,
+  planPattern,
+  deskAvailability,
+} = require('../lib/recurringPattern');
 
 const router = express.Router();
 
@@ -25,6 +32,7 @@ const minutesFrom = (time) => {
 // is active. These are the states a schedule is actually in, three of them
 // derived from its dates rather than stored.
 function scheduleState(row, today) {
+  if (!row.days || row.days.length === 0) return 'canceled';
   if (row.status === 'pending') return 'pending';
   if (row.status === 'canceled') return 'canceled';
   if (row.status === 'denied') return 'denied';
@@ -45,15 +53,22 @@ router.get('/', async (req, res, next) => {
               u.first_name, u.last_name, u.email,
               d.desk_number,
               min(s.status)      AS status,
-              min(s.active_from) AS active_from,
-              max(s.active_until) AS active_until,
-              bool_or(s.active_until IS NULL) AS open_ended,
+              min(s.active_from) FILTER (WHERE s.status <> 'canceled') AS active_from,
+              max(s.active_until) FILTER (WHERE s.status <> 'canceled') AS active_until,
+              bool_or(s.active_until IS NULL) FILTER (WHERE s.status <> 'canceled') AS open_ended,
               min(s.created_at)  AS created_at,
               max(s.decided_at)  AS decided_at,
               max(dec.first_name || ' ' || dec.last_name) AS decided_by,
-              array_agg(s.day_of_week ORDER BY s.day_of_week)      AS days,
-              array_agg(s.start_time::text ORDER BY s.day_of_week) AS start_times,
-              array_agg(s.end_time::text ORDER BY s.day_of_week)   AS end_times,
+              -- A weekday dropped by an edit is cancelled rather than deleted,
+              -- because deleting it would set its past bookings' schedule_id to
+              -- null and lose the link between a served day and the arrangement
+              -- that produced it. So the live pattern is the rows still standing.
+              array_agg(s.day_of_week ORDER BY s.day_of_week)
+                FILTER (WHERE s.status <> 'canceled')      AS days,
+              array_agg(s.start_time::text ORDER BY s.day_of_week)
+                FILTER (WHERE s.status <> 'canceled')      AS start_times,
+              array_agg(s.end_time::text ORDER BY s.day_of_week)
+                FILTER (WHERE s.status <> 'canceled')      AS end_times,
 
               -- Counted from the rows themselves rather than trusted to a stored
               -- total, so a cancelled or edited occurrence is reflected.
@@ -109,7 +124,9 @@ router.get('/', async (req, res, next) => {
         skipped: row.skipped ?? 0,
         decidedBy: row.decided_by,
         decidedAt: row.decided_at,
-        pattern: row.days.map((day, i) => ({
+        // A fully cancelled series has no live rows, so the aggregates come back
+        // null rather than empty.
+        pattern: (row.days ?? []).map((day, i) => ({
           day: DAY_LABELS[day],
           dayNumber: day,
           startMin: minutesFrom(row.start_times[i]),
@@ -119,6 +136,206 @@ router.get('/', async (req, res, next) => {
     );
   } catch (err) {
     next(err);
+  }
+});
+
+
+// PATCH /api/schedules/:seriesId
+// { deskId?, days?, activeUntil? }
+//
+// Changes a live arrangement: which desk, which weekdays and hours, and how long
+// it runs. Whatever is omitted stays as it is.
+//
+// Occurrences already served are history and are never touched. Everything from
+// today onward is cancelled and regenerated from the new pattern, inside one
+// transaction, so a rejected edit leaves the schedule exactly as it was rather
+// than half-moved.
+//
+// The all-or-nothing rule applies here too: an edit that cannot cover every one
+// of its days is refused, because the whole point is that the desk belongs to the
+// holder for the duration.
+router.patch('/:seriesId', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const { deskId, days, activeUntil } = req.body || {};
+    if (deskId == null && !days && activeUntil === undefined) {
+      return res.status(400).json({ message: 'Nothing to change.' });
+    }
+
+    await client.query('BEGIN');
+
+    const { rows: existing } = await client.query(
+      `SELECT s.schedule_id, s.user_id, s.desk_id, s.day_of_week, s.status,
+              s.start_time::text AS start_time, s.end_time::text AS end_time,
+              s.active_from, s.active_until, s.expires_at,
+              u.first_name, u.last_name
+         FROM recurring_schedules s
+         JOIN users u ON u.user_id = s.user_id
+        WHERE s.series_id = $1 AND s.status <> 'canceled'
+        ORDER BY s.day_of_week`,
+      [req.params.seriesId]
+    );
+
+    if (existing.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        message: 'That schedule is no longer active — it may already have been ended.',
+      });
+    }
+
+    const before = existing[0];
+    const seriesId = Number(req.params.seriesId);
+
+    // Anything not supplied keeps its current value, so a caller changing only
+    // the desk does not have to restate the whole pattern.
+    const nextDays = days ?? Object.fromEntries(
+      existing.map((row) => [
+        Object.keys(DAY_NUMBERS).find((k) => DAY_NUMBERS[k] === row.day_of_week),
+        { startMin: minutesFrom(row.start_time), endMin: minutesFrom(row.end_time) },
+      ])
+    );
+    const nextUntil = activeUntil === undefined
+      ? (before.active_until ? toDateString(before.active_until) : null)
+      : activeUntil;
+    const nextDeskId = deskId == null ? before.desk_id : Number(deskId);
+
+    // Regeneration starts today, never at the original start date: a schedule
+    // that has been running for a month keeps the month it already served.
+    const plan = planPattern({ days: nextDays, activeUntil: nextUntil });
+    if (plan.error) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: plan.error });
+    }
+
+    // Cancelled first, so the exclusion constraint stops counting this
+    // schedule's own bookings against the desks it might move to.
+    const { rowCount: released } = await client.query(
+      `UPDATE reservations
+          SET status = 'canceled', expires_at = NULL,
+              decided_by_user_id = $2, decided_at = now()
+        WHERE schedule_id IN (SELECT schedule_id FROM recurring_schedules WHERE series_id = $1)
+          AND status IN ('pending', 'approved')
+          AND starts_at > now()`,
+      [seriesId, req.user?.sub ?? null]
+    );
+
+    const availability = await deskAvailability(client, plan.slots);
+    const target = availability.find((d) => d.deskId === nextDeskId);
+    if (!target) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        message: 'That desk is not available — it may have been taken out of service.',
+      });
+    }
+    if (target.conflicts > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        message: `Desk# ${target.deskNumber} is already booked on ${target.conflicts} of the `
+          + `${target.occurrences} days that change would cover, and a schedule has to cover `
+          + 'every day. Nothing was changed.',
+      });
+    }
+
+    // Weekday rows: update the ones that stay, add the ones that appear, cancel
+    // the ones that go.
+    const wanted = new Map(
+      Object.entries(nextDays).map(([key, t]) => [DAY_NUMBERS[key], t])
+    );
+    const scheduleIdByDay = new Map();
+
+    for (const row of existing) {
+      const times = wanted.get(row.day_of_week);
+      if (times) {
+        await client.query(
+          `UPDATE recurring_schedules
+              SET desk_id = $2, start_time = $3, end_time = $4, active_until = $5
+            WHERE schedule_id = $1`,
+          [row.schedule_id, nextDeskId, minutesToTime(times.startMin),
+           minutesToTime(times.endMin), nextUntil]
+        );
+        scheduleIdByDay.set(row.day_of_week, row.schedule_id);
+      } else {
+        await client.query(
+          `UPDATE recurring_schedules
+              SET status = 'canceled', active_until = CURRENT_DATE,
+                  decided_by_user_id = $2, decided_at = now()
+            WHERE schedule_id = $1`,
+          [row.schedule_id, req.user?.sub ?? null]
+        );
+      }
+    }
+
+    for (const [dayNumber, times] of wanted) {
+      if (scheduleIdByDay.has(dayNumber)) continue;
+      const { rows } = await client.query(
+        `INSERT INTO recurring_schedules
+           (user_id, desk_id, day_of_week, start_time, end_time, status,
+            active_from, active_until, series_id, decided_by_user_id, decided_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
+         RETURNING schedule_id`,
+        [before.user_id, nextDeskId, dayNumber, minutesToTime(times.startMin),
+         minutesToTime(times.endMin), before.status, before.active_from, nextUntil,
+         seriesId, req.user?.sub ?? null]
+      );
+      scheduleIdByDay.set(dayNumber, rows[0].schedule_id);
+    }
+
+    // Regenerate. A collision here is a race rather than a plan — the
+    // availability check just cleared this desk — so it fails the whole edit.
+    for (const slot of plan.slots) {
+      await client.query(
+        `INSERT INTO reservations
+           (user_id, desk_id, schedule_id, starts_at, ends_at, confirmation_code,
+            status, expires_at, booking_source, decided_by_user_id, decided_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'recurring', $9, now())`,
+        [
+          before.user_id, nextDeskId, scheduleIdByDay.get(slot.dayNumber),
+          slot.startsAt, slot.endsAt, generateConfirmationCode(),
+          before.status, before.status === 'pending' ? before.expires_at : null,
+          req.user?.sub ?? null,
+        ]
+      );
+    }
+
+    const changes = {};
+    if (nextDeskId !== before.desk_id) {
+      changes.desk = { from: before.desk_id, to: nextDeskId };
+    }
+    if (days) changes.days = true;
+    if (activeUntil !== undefined) {
+      changes.until = { from: before.active_until ? toDateString(before.active_until) : null, to: nextUntil };
+    }
+
+    await recordActivity({
+      activityType: 'modified',
+      scheduleId: seriesId,
+      actorUserId: req.user?.sub ?? null,
+      metadata: { ...changes, released, regenerated: plan.slots.length },
+      description: `Edited ${before.first_name} ${before.last_name}'s schedule — `
+        + `${released} booking(s) released, ${plan.slots.length} regenerated`,
+    }, client);
+
+    await client.query('COMMIT');
+
+    res.json({
+      seriesId: String(seriesId),
+      deskNumber: target.deskNumber,
+      released,
+      regenerated: plan.slots.length,
+      activeUntil: nextUntil,
+      changed: Object.keys(changes),
+    });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (err.constraint === 'no_double_booking') {
+      return res.status(409).json({
+        message: 'One of those days was booked while the change was being made. '
+          + 'Nothing was changed — try again.',
+      });
+    }
+    next(err);
+  } finally {
+    client.release();
   }
 });
 
