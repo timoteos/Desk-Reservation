@@ -1,7 +1,7 @@
 const express = require('express');
 const { pool, query } = require('../db');
 const { expirePending } = require('../lib/expirePending');
-const { toTimestamps, generateConfirmationCode } = require('../lib/reservationShape');
+const { toTimestamps, generateConfirmationCode, toDateString } = require('../lib/reservationShape');
 const { requireAdmin } = require('../lib/auth');
 const { recordActivity } = require('../lib/activityLog');
 const { officeHoursError, workingDayError } = require('../lib/officeHours');
@@ -61,6 +61,11 @@ router.get('/', async (req, res, next) => {
               u.first_name, u.last_name, u.email, ro.role_type,
               d.desk_number,
               min(s.expires_at) AS expires_at,
+              min(s.active_from) AS active_from,
+              -- max() ignores nulls, so an open-ended schedule needs asking about
+              -- separately rather than reading as bounded by its longest sibling.
+              max(s.active_until) AS active_until,
+              bool_or(s.active_until IS NULL) AS open_ended,
               array_agg(s.schedule_id ORDER BY s.day_of_week) AS schedule_ids,
               array_agg(s.day_of_week ORDER BY s.day_of_week) AS days,
               array_agg(s.start_time::text ORDER BY s.day_of_week) AS start_times,
@@ -101,6 +106,9 @@ router.get('/', async (req, res, next) => {
         role: row.role_type,
         deskNumber: row.desk_number,
         bookingCount: row.booking_count,
+        activeFrom: row.active_from ? toDateString(row.active_from) : null,
+        activeUntil: row.open_ended || !row.active_until ? null : toDateString(row.active_until),
+        openEnded: row.open_ended,
         pattern: row.days.map((day, i) => ({
           day: DAY_LABELS[day],
           startMin: minutesFrom(row.start_times[i]),
