@@ -11,12 +11,19 @@ import {
   decideRequest,
 } from '../api/client';
 
+// Ordered by what an admin does, not by when each tab was built.
+//
+// Reservations and Schedules sit together because they answer the same question
+// from two angles — who has a desk today, and who has a standing claim on one.
+// Requests follows: it is the only tab holding work, and being last was wrong
+// for the one thing that needs a decision. Users is a directory and Logs is
+// history, so both are reference and go at the end.
 const TABS = [
   { key: 'reservations', label: 'Reservations', icon: CalendarDays },
-  { key: 'users', label: 'Users', icon: Users },
   { key: 'schedules', label: 'Schedules', icon: CalendarClock },
-  { key: 'logs', label: 'Logs', icon: ScrollText },
   { key: 'requests', label: 'Requests', icon: Inbox },
+  { key: 'users', label: 'Users', icon: Users },
+  { key: 'logs', label: 'Logs', icon: ScrollText },
 ];
 
 const formatMinutes = (mins) => {
