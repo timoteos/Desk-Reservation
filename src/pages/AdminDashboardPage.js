@@ -25,6 +25,11 @@ const formatMinutes = (mins) => {
   return `${hour}:${m.toString().padStart(2, '0')} ${ampm}`;
 };
 
+const shortDay = (dateStr) =>
+  new Date(`${dateStr}T00:00:00`).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+  });
+
 const formatDate = (dateStr) => {
   const d = new Date(dateStr + 'T00:00:00');
   return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
@@ -260,7 +265,18 @@ function RequestCard({ request, onDecide, busy }) {
       <div className="text-sm text-ink-body">
         {isRecurring ? (
           <>
+            {/* The span decides whether this is a six-week project or a
+                three-month contract, which is most of what the decision rests
+                on — one desk of twelve, held for that long. */}
             <p className="text-ink-muted text-xs mb-1">
+              {request.activeFrom && (
+                <>
+                  {shortDay(request.activeFrom)}
+                  {' – '}
+                  {request.activeUntil ? shortDay(request.activeUntil) : 'open-ended'}
+                  {' · '}
+                </>
+              )}
               Desk# {request.deskNumber} &middot; {request.bookingCount} bookings
             </p>
             {request.pattern.map((p) => (

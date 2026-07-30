@@ -65,45 +65,159 @@ const atTime = (date, minutes) => {
   return d;
 };
 
+
+// Turns a request body into the window it covers and every slot it implies.
+//
+// Shared by the availability preview and the booking itself: if these disagreed,
+// the map would promise a desk the booking then refused. Returns { error } for
+// anything the caller got wrong, so both routes reject identically.
+function planPattern({ days, activeFrom, activeUntil }) {
+  if (!days || Object.keys(days).length === 0) {
+    return { error: 'At least one day is required.' };
+  }
+
+  const invalid = Object.keys(days).filter((key) => !DAY_NUMBERS[key]);
+  if (invalid.length > 0) return { error: `Unknown day: ${invalid.join(', ')}` };
+
+  const today = startOfToday();
+  const requestedFrom = parseDay(activeFrom);
+  if (activeFrom && !requestedFrom) return { error: 'Start date is not a valid date.' };
+  const from = requestedFrom && requestedFrom > today ? requestedFrom : today;
+
+  const requestedUntil = parseDay(activeUntil);
+  if (activeUntil && !requestedUntil) return { error: 'End date is not a valid date.' };
+  if (requestedUntil && requestedUntil < from) {
+    return { error: 'The end date must be on or after the start date.' };
+  }
+
+  const ceiling = new Date(from.getTime() + (MAX_HORIZON_DAYS - 1) * DAY_MS);
+  const openEnded = !requestedUntil;
+  const to = openEnded
+    ? new Date(from.getTime() + (DEFAULT_HORIZON_DAYS - 1) * DAY_MS)
+    : new Date(Math.min(requestedUntil.getTime(), ceiling.getTime()));
+
+  const slots = [];
+  for (const [dayKey, times] of Object.entries(days)) {
+    const hoursProblem = officeHoursError(times.startMin, times.endMin);
+    if (hoursProblem) return { error: `${hoursProblem} (${dayKey})` };
+
+    for (const date of occurrencesFor([DAY_NUMBERS[dayKey]], from, to)) {
+      const startsAt = atTime(date, times.startMin);
+      // Skip an occurrence whose time has already passed today — otherwise a
+      // Monday pattern submitted on Monday afternoon generates a slot for that
+      // morning, and expiry lands in the past, killing the whole request.
+      if (startsAt <= new Date()) continue;
+      slots.push({
+        dayKey,
+        dayNumber: DAY_NUMBERS[dayKey],
+        startsAt,
+        endsAt: atTime(date, times.endMin),
+        startMin: times.startMin,
+        endMin: times.endMin,
+      });
+    }
+  }
+
+  if (slots.length === 0) {
+    return {
+      error: openEnded
+        ? 'Every occurrence in that pattern has already passed. Try starting next week.'
+        : 'That pattern produces no bookings between those dates. Check the days and the date range.',
+    };
+  }
+
+  return {
+    from,
+    to,
+    openEnded,
+    slots,
+    cappedAtCeiling: !!requestedUntil && requestedUntil > ceiling,
+  };
+}
+
+// How many of a pattern's slots each active desk could honour.
+//
+// Availability for a recurring pattern is not a yes or a no: a desk booked on
+// three Tuesdays out of sixty-five occurrences is neither free nor unusable.
+// Callers get the counts and decide what to do with a partial.
+async function deskAvailability(client, slots) {
+  const { rows: desks } = await client.query(
+    'SELECT desk_id, desk_number FROM desks WHERE is_active ORDER BY desk_number'
+  );
+
+  const starts = slots.map((s) => s.startsAt);
+  const ends = slots.map((s) => s.endsAt);
+
+  const out = [];
+  for (const desk of desks) {
+    const { rows } = await client.query(
+      `SELECT count(*)::int AS conflicts
+         FROM reservations r
+        WHERE r.desk_id = $1
+          AND r.status IN ('pending', 'approved')
+          AND EXISTS (
+            SELECT 1 FROM unnest($2::timestamp[], $3::timestamp[]) AS s(starts_at, ends_at)
+             WHERE tsrange(r.starts_at, r.ends_at) && tsrange(s.starts_at, s.ends_at)
+          )`,
+      [desk.desk_id, starts, ends]
+    );
+    out.push({
+      deskId: desk.desk_id,
+      deskNumber: desk.desk_number,
+      occurrences: slots.length,
+      conflicts: rows[0].conflicts,
+      bookable: slots.length - rows[0].conflicts,
+    });
+  }
+  return out;
+}
+
+// POST /api/recurring-schedules/availability
+// { days, activeFrom?, activeUntil? }
+//
+// What each desk could offer this pattern, so the requester can choose rather
+// than being assigned one and told afterwards. A preview rather than a GET
+// because the pattern is the input, and it does not fit in a query string.
+router.post('/availability', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const plan = planPattern(req.body || {});
+    if (plan.error) return res.status(400).json({ message: plan.error });
+
+    const desks = await deskAvailability(client, plan.slots);
+
+    res.json({
+      occurrences: plan.slots.length,
+      activeFrom: toDateString(plan.from),
+      activeUntil: plan.openEnded ? null : toDateString(plan.to),
+      openEnded: plan.openEnded,
+      generatedThrough: toDateString(plan.to),
+      cappedAtCeiling: plan.cappedAtCeiling,
+      desks,
+    });
+  } catch (err) {
+    next(err);
+  } finally {
+    client.release();
+  }
+});
+
 // POST /api/recurring-schedules
 // { email, days: { mon: { startMin, endMin }, ... }, activeFrom?, activeUntil? }
 router.post('/', async (req, res, next) => {
   const client = await pool.connect();
   try {
-    const { email, days, activeFrom, activeUntil } = req.body;
+    const { email, days, activeFrom, activeUntil, deskId } = req.body;
 
-    if (!email || !days || Object.keys(days).length === 0) {
-      return res.status(400).json({ message: 'email and at least one day are required' });
+    if (!email) {
+      return res.status(400).json({ message: 'email is required' });
     }
 
-    const invalid = Object.keys(days).filter((key) => !DAY_NUMBERS[key]);
-    if (invalid.length > 0) {
-      return res.status(400).json({ message: `Unknown day: ${invalid.join(', ')}` });
-    }
-
-    // The window the pattern runs over. Never earlier than today, since a
-    // schedule cannot generate bookings into the past.
-    const today = startOfToday();
-    const requestedFrom = parseDay(activeFrom);
-    if (activeFrom && !requestedFrom) {
-      return res.status(400).json({ message: 'Start date is not a valid date.' });
-    }
-    const from = requestedFrom && requestedFrom > today ? requestedFrom : today;
-
-    const requestedUntil = parseDay(activeUntil);
-    if (activeUntil && !requestedUntil) {
-      return res.status(400).json({ message: 'End date is not a valid date.' });
-    }
-    if (requestedUntil && requestedUntil < from) {
-      return res.status(400).json({ message: 'The end date must be on or after the start date.' });
-    }
-
-    const ceiling = new Date(from.getTime() + (MAX_HORIZON_DAYS - 1) * DAY_MS);
-    const openEnded = !requestedUntil;
-    const to = openEnded
-      ? new Date(from.getTime() + (DEFAULT_HORIZON_DAYS - 1) * DAY_MS)
-      : new Date(Math.min(requestedUntil.getTime(), ceiling.getTime()));
-    const cappedAtCeiling = !!requestedUntil && requestedUntil > ceiling;
+    // Same planner the availability preview uses, so the map cannot promise a
+    // desk this route would then refuse.
+    const plan = planPattern({ days, activeFrom, activeUntil });
+    if (plan.error) return res.status(400).json({ message: plan.error });
+    const { from, to, openEnded, slots, cappedAtCeiling } = plan;
 
     const userResult = await client.query(
       'SELECT user_id FROM users WHERE lower(email) = lower($1) AND is_active',
@@ -116,70 +230,33 @@ router.post('/', async (req, res, next) => {
     }
     const userId = userResult.rows[0].user_id;
 
-    // Every slot this pattern implies, so a desk can be chosen against the
-    // whole set rather than one day at a time.
-    const slots = [];
-    for (const [dayKey, times] of Object.entries(days)) {
-      const dayNumber = DAY_NUMBERS[dayKey];
-      const hoursProblem = officeHoursError(times.startMin, times.endMin);
-      if (hoursProblem) {
-        return res.status(400).json({ message: `${hoursProblem} (${dayKey})` });
-      }
-      for (const date of occurrencesFor([dayNumber], from, to)) {
-        const startsAt = atTime(date, times.startMin);
-        // Skip an occurrence whose time has already passed today — otherwise a
-        // Monday pattern submitted on Monday afternoon generates a slot for
-        // that morning, and expiry (2h before the first occurrence) lands in
-        // the past, killing the whole request the moment it's made.
-        if (startsAt <= new Date()) continue;
-        slots.push({
-          dayKey,
-          dayNumber,
-          startsAt,
-          endsAt: atTime(date, times.endMin),
-          startMin: times.startMin,
-          endMin: times.endMin,
-        });
-      }
-    }
-
-    if (slots.length === 0) {
-      return res.status(400).json({
-        message: openEnded
-          ? 'Every occurrence in that pattern has already passed. Try starting next week.'
-          : 'That pattern produces no bookings between those dates. Check the days and the date range.',
-      });
-    }
-
-    const deskResult = await client.query(
-      'SELECT desk_id, desk_number FROM desks WHERE is_active ORDER BY desk_number'
-    );
-
-    // Pick the desk that can honour the most occurrences. A desk with an
-    // existing booking on one Tuesday shouldn't disqualify it from the rest.
-    let best = null;
-    for (const desk of deskResult.rows) {
-      const { rows } = await client.query(
-        `SELECT count(*)::int AS conflicts
-           FROM reservations r
-          WHERE r.desk_id = $1
-            AND r.status IN ('pending', 'approved')
-            AND EXISTS (
-              SELECT 1 FROM unnest($2::timestamp[], $3::timestamp[]) AS s(starts_at, ends_at)
-               WHERE tsrange(r.starts_at, r.ends_at) && tsrange(s.starts_at, s.ends_at)
-            )`,
-        [desk.desk_id, slots.map((s) => s.startsAt), slots.map((s) => s.endsAt)]
-      );
-      const conflicts = rows[0].conflicts;
-      if (best === null || conflicts < best.conflicts) {
-        best = { ...desk, conflicts };
-      }
-      if (conflicts === 0) break;
-    }
-
-    if (!best) {
+    const availability = await deskAvailability(client, slots);
+    if (availability.length === 0) {
       return res.status(409).json({ message: 'No desks are configured.' });
     }
+
+    let best;
+    if (deskId != null) {
+      // An explicit choice is honoured even when partly taken — the requester
+      // was shown how many days it covers and picked it anyway. Refusing here
+      // would contradict what the map offered.
+      best = availability.find((d) => d.deskId === Number(deskId));
+      if (!best) {
+        return res.status(400).json({
+          message: 'That desk is not available — it may have been taken out of service.',
+        });
+      }
+      if (best.bookable === 0) {
+        return res.status(409).json({
+          message: `Desk# ${best.deskNumber} is booked for every day in that pattern. Pick another desk.`,
+        });
+      }
+    } else {
+      // No choice made: the desk that honours the most occurrences.
+      best = availability.reduce((a, b) => (b.conflicts < a.conflicts ? b : a));
+    }
+
+    const chosenDesk = { desk_id: best.deskId, desk_number: best.deskNumber };
 
     await client.query('BEGIN');
 
@@ -203,7 +280,7 @@ router.post('/', async (req, res, next) => {
          RETURNING schedule_id`,
         [
           userId,
-          best.desk_id,
+          chosenDesk.desk_id,
           DAY_NUMBERS[dayKey],
           minutesToTime(times.startMin),
           minutesToTime(times.endMin),
@@ -231,7 +308,7 @@ router.post('/', async (req, res, next) => {
            VALUES ($1, $2, $3, $4, $5, $6, $7, 'recurring')`,
           [
             userId,
-            best.desk_id,
+            chosenDesk.desk_id,
             scheduleIds[slot.dayKey],
             slot.startsAt,
             slot.endsAt,
@@ -257,8 +334,8 @@ router.post('/', async (req, res, next) => {
       activityType: 'schedule_requested',
       scheduleId: Object.values(scheduleIds)[0],
       actorUserId: userId,
-      metadata: { bookingsCreated: created.length, skipped: skipped.length, deskNumber: best.desk_number },
-      description: `Recurring schedule requested — ${created.length} booking(s) on Desk# ${best.desk_number}`,
+      metadata: { bookingsCreated: created.length, skipped: skipped.length, deskNumber: chosenDesk.desk_number },
+      description: `Recurring schedule requested — ${created.length} booking(s) on Desk# ${chosenDesk.desk_number}`,
     }, client);
 
     await client.query('COMMIT');
@@ -266,7 +343,7 @@ router.post('/', async (req, res, next) => {
     res.status(201).json({
       status: 'pending',
       expiresAt,
-      deskNumber: best.desk_number,
+      deskNumber: chosenDesk.desk_number,
       activeFrom: toDateString(from),
       activeUntil: openEnded ? null : toDateString(to),
       openEnded,
