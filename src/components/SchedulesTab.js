@@ -134,6 +134,9 @@ export default function SchedulesTab({ dataVersion = 0, onChanged }) {
     setNotice(
       `${schedule.name}'s schedule updated — Desk# ${result.deskNumber}, `
       + `${result.regenerated} booking${result.regenerated === 1 ? '' : 's'} from today onward. `
+      + (result.cappedAtCeiling
+        ? `Capped at a year, so it runs to ${result.activeUntil}. `
+        : '')
       + 'Days already worked are unchanged. They have not been notified.'
     );
     await load();

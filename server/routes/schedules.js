@@ -221,6 +221,14 @@ router.patch('/:seriesId', async (req, res, next) => {
       return res.status(400).json({ message: plan.error });
     }
 
+    // The date that gets stored is the one generation actually honoured, not the
+    // one that was asked for. planPattern caps a run at a year, so writing the
+    // request verbatim would record an end date months past the last booking —
+    // and the Schedules tab, which warns about bookings stopping early only for
+    // open-ended schedules, would show a confident span it could not deliver.
+    // The create route already stores the capped value; this is the same rule.
+    const storedUntil = plan.openEnded ? null : toDateString(plan.to);
+
     // Cancelled first, so the exclusion constraint stops counting this
     // schedule's own bookings against the desks it might move to.
     const { rowCount: released } = await client.query(
@@ -267,7 +275,7 @@ router.patch('/:seriesId', async (req, res, next) => {
               SET desk_id = $2, start_time = $3, end_time = $4, active_until = $5
             WHERE schedule_id = $1`,
           [row.schedule_id, nextDeskId, minutesToTime(times.startMin),
-           minutesToTime(times.endMin), nextUntil]
+           minutesToTime(times.endMin), storedUntil]
         );
         scheduleIdByDay.set(row.day_of_week, row.schedule_id);
       } else {
@@ -290,7 +298,7 @@ router.patch('/:seriesId', async (req, res, next) => {
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
          RETURNING schedule_id`,
         [before.user_id, nextDeskId, dayNumber, minutesToTime(times.startMin),
-         minutesToTime(times.endMin), before.status, before.active_from, nextUntil,
+         minutesToTime(times.endMin), before.status, before.active_from, storedUntil,
          seriesId, req.user?.sub ?? null]
       );
       scheduleIdByDay.set(dayNumber, rows[0].schedule_id);
@@ -319,7 +327,10 @@ router.patch('/:seriesId', async (req, res, next) => {
     }
     if (days) changes.days = true;
     if (activeUntil !== undefined) {
-      changes.until = { from: before.active_until ? toDateString(before.active_until) : null, to: nextUntil };
+      changes.until = {
+        from: before.active_until ? toDateString(before.active_until) : null,
+        to: storedUntil,
+      };
     }
 
     await recordActivity({
@@ -338,7 +349,8 @@ router.patch('/:seriesId', async (req, res, next) => {
       deskNumber: target.deskNumber,
       released,
       regenerated: plan.slots.length,
-      activeUntil: nextUntil,
+      activeUntil: storedUntil,
+      cappedAtCeiling: plan.cappedAtCeiling,
       changed: Object.keys(changes),
     });
   } catch (err) {

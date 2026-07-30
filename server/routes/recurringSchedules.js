@@ -3,6 +3,7 @@ const { pool } = require('../db');
 const { generateConfirmationCode, toDateString } = require('../lib/reservationShape');
 const { expiryFor } = require('../lib/expirePending');
 const { recordActivity } = require('../lib/activityLog');
+const { readToken } = require('../lib/auth');
 const {
   DAY_NUMBERS,
   minutesToTime,
@@ -18,7 +19,10 @@ const router = express.Router();
 // What each desk could offer this pattern, so the requester can choose rather
 // than being assigned one and told afterwards. A preview rather than a GET
 // because the pattern is the input, and it does not fit in a query string.
-router.post('/availability', async (req, res, next) => {
+//
+// Open, because requesting a schedule is. readToken is here only to tell an
+// admin apart from an ordinary requester, for ignoreSeriesId below.
+router.post('/availability', readToken, async (req, res, next) => {
   const client = await pool.connect();
   try {
     const plan = planPattern(req.body || {});
@@ -26,8 +30,16 @@ router.post('/availability', async (req, res, next) => {
 
     // An edit previews against a pattern the schedule itself already occupies,
     // so it says which schedule to discount. Left out by a new request.
+    //
+    // Admins only. This endpoint is open, and honouring the parameter for anyone
+    // meant an unauthenticated caller could name any series and be told a desk
+    // was free that it holds — a map promising what the booking would refuse,
+    // which is the failure this project has produced more than any other.
+    const isAdmin = req.user?.role === 'admin';
     const desks = await deskAvailability(client, plan.slots, {
-      ignoreSeriesId: req.body?.ignoreSeriesId ? Number(req.body.ignoreSeriesId) : null,
+      ignoreSeriesId: isAdmin && req.body?.ignoreSeriesId
+        ? Number(req.body.ignoreSeriesId)
+        : null,
     });
 
     res.json({

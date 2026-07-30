@@ -119,6 +119,51 @@ test('a refusal from the server is shown and the dialog stays open', async () =>
   expect(onClose).not.toHaveBeenCalled();
 });
 
+test('toggling a weekday off and back on is not a change', async () => {
+  openDialog();
+  await waitFor(() => expect(api.getRecurringAvailability).toHaveBeenCalled());
+
+  // Object keys keep insertion order, so this used to leave days looking
+  // different from the baseline while describing the same pattern — enabling Save
+  // and releasing and regenerating every booking for nothing.
+  fireEvent.click(screen.getByRole('button', { name: 'Mon' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Mon' }));
+
+  expect(screen.getByRole('button', { name: /save changes/i })).toBeDisabled();
+});
+
+test('a weekday added back keeps the hours the schedule already works', async () => {
+  openDialog();
+  await waitFor(() => expect(api.getRecurringAvailability).toHaveBeenCalled());
+
+  fireEvent.click(screen.getByRole('button', { name: 'Mon' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Mon' }));
+
+  await waitFor(() => {
+    const sent = api.getRecurringAvailability.mock.calls.at(-1)[0];
+    expect(sent.days.mon).toEqual({ startMin: 450, endMin: 1020 });
+  });
+});
+
+test('a brand new weekday copies the hours of the days already kept', async () => {
+  // Mon/Wed run 9:00-13:00 here, so a new Friday should too rather than
+  // defaulting to some fixed window.
+  openDialog({
+    pattern: [
+      { day: 'Monday', dayNumber: 1, startMin: 540, endMin: 780 },
+      { day: 'Wednesday', dayNumber: 3, startMin: 540, endMin: 780 },
+    ],
+  });
+  await waitFor(() => expect(api.getRecurringAvailability).toHaveBeenCalled());
+
+  fireEvent.click(screen.getByRole('button', { name: 'Fri' }));
+
+  await waitFor(() => {
+    const sent = api.getRecurringAvailability.mock.calls.at(-1)[0];
+    expect(sent.days.fri).toEqual({ startMin: 540, endMin: 780 });
+  });
+});
+
 test('an open-ended schedule keeps its end date blank', async () => {
   openDialog({ activeUntil: null });
   await waitFor(() => expect(api.getRecurringAvailability).toHaveBeenCalled());

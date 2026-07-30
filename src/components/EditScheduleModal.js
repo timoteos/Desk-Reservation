@@ -3,6 +3,7 @@ import { X, Check } from 'lucide-react';
 import DeskMap from './DeskMap';
 import { getRecurringAvailability, adminEditSchedule } from '../api/client';
 import {
+  OFFICE_START,
   OFFICE_END,
   SLOT_MINUTES,
   toTimeValue,
@@ -26,6 +27,14 @@ const todayValue = () => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 
+// Days keyed in weekday order rather than the order they were clicked.
+// JavaScript object keys keep insertion order, so toggling Wednesday off and back
+// on gives {mon, fri, wed} — which serialises differently from {mon, wed, fri}
+// while describing the same pattern. Anything comparing or sending days goes
+// through this.
+const orderDays = (days) =>
+  Object.fromEntries(DAYS.filter((d) => days[d.key]).map((d) => [d.key, days[d.key]]));
+
 const shortDay = (dateStr) =>
   dateStr
     ? new Date(`${dateStr}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -37,7 +46,7 @@ const shortDay = (dateStr) =>
 // happened at. Everything from today onward is what this changes, which is why
 // the availability shown is for the remaining run and not the whole original.
 export default function EditScheduleModal({ schedule, onClose, onSaved }) {
-  const [days, setDays] = useState(() =>
+  const baseline = orderDays(
     Object.fromEntries(
       schedule.pattern.map((p) => [
         DAY_BY_NUMBER[p.dayNumber],
@@ -45,6 +54,8 @@ export default function EditScheduleModal({ schedule, onClose, onSaved }) {
       ])
     )
   );
+
+  const [days, setDays] = useState(baseline);
   const [activeUntil, setActiveUntil] = useState(schedule.activeUntil ?? '');
   const [deskId, setDeskId] = useState(schedule.deskId ?? null);
 
@@ -94,9 +105,19 @@ export default function EditScheduleModal({ schedule, onClose, onSaved }) {
   const toggleDay = (key) =>
     setDays((prev) => {
       const next = { ...prev };
-      if (next[key]) delete next[key];
-      else next[key] = { start: toTimeValue(OFFICE_END - 120), end: toTimeValue(OFFICE_END) };
-      return next;
+      if (next[key]) {
+        delete next[key];
+        return orderDays(next);
+      }
+      // A day being added takes the hours the schedule already keeps, since a
+      // schedule almost always works the same hours every day. Its own original
+      // hours first if it had them, then whatever the other days use, and only
+      // then the full office day.
+      const sibling = baseline[key] ?? Object.values(orderDays(prev))[0];
+      next[key] = sibling
+        ? { start: sibling.start, end: sibling.end }
+        : { start: toTimeValue(OFFICE_START), end: toTimeValue(OFFICE_END) };
+      return orderDays(next);
     });
 
   const setDayTime = (key, field, value) =>
@@ -119,14 +140,7 @@ export default function EditScheduleModal({ schedule, onClose, onSaved }) {
   const chosenUsable = chosen ? deskState(chosen) === 'available' : false;
 
   const dirty =
-    JSON.stringify(days) !== JSON.stringify(
-      Object.fromEntries(
-        schedule.pattern.map((p) => [
-          DAY_BY_NUMBER[p.dayNumber],
-          { start: toTimeValue(p.startMin), end: toTimeValue(p.endMin) },
-        ])
-      )
-    ) ||
+    JSON.stringify(orderDays(days)) !== JSON.stringify(baseline) ||
     (activeUntil || null) !== (schedule.activeUntil ?? null) ||
     String(deskId) !== String(schedule.deskId);
 
@@ -247,6 +261,14 @@ export default function EditScheduleModal({ schedule, onClose, onSaved }) {
             className="border border-surface-line rounded-lg px-3 py-2 text-ink-body focus:outline-none focus:ring-2 focus:ring-mqd-btn"
           />
         </label>
+
+        {availability?.cappedAtCeiling && (
+          <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm mb-4">
+            A schedule generates at most a year of bookings, so this one will run to{' '}
+            {shortDay(availability.generatedThrough)} rather than the date given. Extend it
+            again nearer the time.
+          </p>
+        )}
 
         {availabilityError && (
           <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm mb-4">
