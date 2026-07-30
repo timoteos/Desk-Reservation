@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { CalendarX, Search, Pencil } from 'lucide-react';
-import { getAllReservations, adminCancelReservation, adminCancelSeries } from '../api/client';
+import { getAllReservations, adminCancelReservation } from '../api/client';
 import EditReservationModal from './EditReservationModal';
 
 const SCOPES = [
@@ -38,8 +38,6 @@ const formatDate = (dateStr) => {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
 const shortDay = (dateStr) =>
   new Date(`${dateStr}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
@@ -47,15 +45,13 @@ const shortDay = (dateStr) =>
 // on a booking is it having already finished.
 const isLive = (r) => new Date(`${r.date}T00:00:00`).setMinutes(r.endMin) > Date.now();
 
-// One entry per pattern rather than one per generated booking.
+// One entry per schedule rather than one per generated booking.
 //
 // A weekly schedule materialises as a real row for each occurrence, because the
 // exclusion constraint can only compare rows — but that meant a single intern's
 // schedule filled the tab. In testing, 63 of 64 upcoming rows belonged to five
-// patterns. Grouping is presentational only; the rows underneath are untouched.
-//
-// The pattern is derived from its occurrences rather than fetched, since each
-// day of a schedule can carry its own hours and the occurrences already say so.
+// patterns. Grouping is presentational only; the rows underneath are untouched,
+// and each is still an ordinary booking that can be cancelled or moved on its own.
 const groupByschedule = (rows) => {
   const groups = [];
   const bySchedule = new Map();
@@ -80,15 +76,6 @@ const groupByschedule = (rows) => {
     g.lead = g.items[0];
     g.first = g.items[0].date;
     g.last = g.items[g.items.length - 1].date;
-    // Distinct weekday-and-hours combinations, in week order.
-    const seen = new Map();
-    g.items.forEach((r) => {
-      const day = new Date(`${r.date}T00:00:00`).getDay();
-      const key = `${day}-${r.startMin}-${r.endMin}`;
-      if (!seen.has(key)) seen.set(key, { day, startMin: r.startMin, endMin: r.endMin });
-    });
-    g.pattern = [...seen.values()].sort((a, b) => a.day - b.day || a.startMin - b.startMin);
-    g.liveCount = g.items.filter(isLive).length;
   });
 
   return groups;
@@ -163,15 +150,19 @@ function BookingCard({ r, confirmingId, setConfirmingId, busyId, onCancel, onEdi
 }
 
 
-// A whole recurring pattern as one entry. Collapsed it answers what an admin
-// scanning the list needs — who, which desk, which days, over what span — and
-// expands to the individual bookings when they need a specific one.
-function SeriesCard({
+// A schedule's bookings, folded into one row so a single pattern cannot bury the
+// list — 63 of 64 upcoming rows belonged to five schedules when this was written.
+//
+// That is all this does now. It used to restate the pattern, the span and the
+// desk, and carry Cancel series and Edit — which was the Schedules tab, rendered
+// a second time inside this one, with a second front door onto ending somebody's
+// arrangement. The arrangement is managed in one place; this tab is for the
+// bookings it produced, and for who is at which desk on a given day.
+function SeriesGroup({
   group, expanded, onToggle, confirmingId, setConfirmingId,
-  busyId, onCancel, onCancelSeries, onEdit,
+  busyId, onCancel, onEdit, onManage,
 }) {
-  const { lead, items, pattern, first, last, liveCount, key } = group;
-  const confirmingSeries = confirmingId === key;
+  const { lead, items, first, last } = group;
 
   return (
     <div className="bg-white rounded-lg p-3.5">
@@ -184,60 +175,26 @@ function SeriesCard({
             </span>
           </div>
 
-          <div className="text-ink-muted text-sm mt-0.5">
-            {pattern.map((p) => (
-              <p key={`${p.day}-${p.startMin}`}>
-                {DAY_NAMES[p.day]} &middot; {formatMinutes(p.startMin)} - {formatMinutes(p.endMin)}
-              </p>
-            ))}
-          </div>
-
-          <p className="text-ink-muted text-sm mt-1">
-            {shortDay(first)} &ndash; {shortDay(last)} &middot; Desk# {lead.deskNumber} &middot;{' '}
-            {items.length} booking{items.length === 1 ? '' : 's'}
+          <p className="text-ink-muted text-sm mt-0.5">
+            Desk# {lead.deskNumber} &middot; {items.length} booking
+            {items.length === 1 ? '' : 's'} &middot; {shortDay(first)} &ndash; {shortDay(last)}
           </p>
 
-          <button
-            onClick={onToggle}
-            className="text-mqd-700 text-xs font-semibold mt-1.5 hover:underline"
-          >
-            {expanded ? 'Hide bookings' : `Show all ${items.length} bookings`}
-          </button>
-        </div>
-
-        {liveCount > 0 && (
-          confirmingSeries ? (
-            <div className="flex flex-col items-end gap-2 shrink-0">
-              <p className="text-red-700 text-xs max-w-[13rem] text-right">
-                Cancels {liveCount} remaining booking{liveCount === 1 ? '' : 's'} and ends the
-                schedule. Past ones are kept.
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => onCancelSeries(group)}
-                  disabled={busyId === key}
-                  className="bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white text-xs font-semibold px-3 py-1.5 rounded transition"
-                >
-                  {busyId === key ? 'Cancelling…' : 'Cancel series'}
-                </button>
-                <button
-                  onClick={() => setConfirmingId(null)}
-                  disabled={busyId === key}
-                  className="border border-surface-line hover:bg-surface-panel disabled:opacity-40 text-ink-body text-xs font-semibold px-3 py-1.5 rounded transition"
-                >
-                  Keep
-                </button>
-              </div>
-            </div>
-          ) : (
+          <div className="flex items-center gap-3 mt-1.5">
             <button
-              onClick={() => setConfirmingId(key)}
-              className="shrink-0 border border-red-300 text-red-700 hover:bg-red-50 text-xs font-semibold px-3 py-1.5 rounded transition"
+              onClick={onToggle}
+              className="text-mqd-700 text-xs font-semibold hover:underline"
             >
-              Cancel series
+              {expanded ? 'Hide bookings' : `Show all ${items.length} bookings`}
             </button>
-          )
-        )}
+            <button
+              onClick={onManage}
+              className="text-ink-muted hover:text-ink-body text-xs font-semibold transition"
+            >
+              Manage this schedule &rarr;
+            </button>
+          </div>
+        </div>
       </div>
 
       {expanded && (
@@ -283,7 +240,7 @@ function Section({ title, count, empty, children }) {
 // dataVersion changes when an admin action elsewhere on the dashboard has
 // altered reservations; onChanged reports this tab's own overrides back so the
 // rest of the dashboard can do the same.
-export default function ReservationsTab({ dataVersion = 0, onChanged }) {
+export default function ReservationsTab({ dataVersion = 0, onChanged, onManageSchedules }) {
   const [scope, setScope] = useState('upcoming');
   const [reservations, setReservations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -318,29 +275,6 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
       await load();
       setConfirmingId(null);
       // An override writes a log entry, so the Logs tab is now stale too.
-      onChanged?.();
-    } catch (err) {
-      setError(err.message);
-      await load();
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  // Cancelling a series is one action rather than one per occurrence. A holder
-  // with a 90-day pattern has dozens of confirmation codes and no way to end the
-  // whole thing, which is why an expired contract used to keep its desk.
-  const handleCancelSeries = async (group) => {
-    setBusyId(group.key);
-    try {
-      const result = await adminCancelSeries(group.lead.seriesId);
-      setChanged(
-        `${group.lead.user}'s recurring schedule ended. ` +
-        `${result.bookingsCanceled} upcoming booking${result.bookingsCanceled === 1 ? '' : 's'} ` +
-        'released. They have not been notified.'
-      );
-      setConfirmingId(null);
-      await load();
       onChanged?.();
     } catch (err) {
       setError(err.message);
@@ -432,16 +366,15 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
         </div>
       ) : (
         <div className="flex flex-col gap-5 max-h-[28rem] overflow-y-auto pr-1">
-          {/* Recurring first: it is the shorter list and the one that holds a
-              desk for weeks, so it is what an admin reviewing commitments wants
-              at the top. One-off bookings are the churn underneath. */}
+          {/* Schedule bookings first: it is the shorter list, being folded, and
+              keeps one pattern from burying the one-off churn underneath. */}
           <Section
-            title="Recurring schedules"
+            title="From a schedule"
             count={seriesGroups.length}
-            empty="No recurring schedules in this view."
+            empty="No schedule bookings in this view."
           >
             {seriesGroups.map((g) => (
-              <SeriesCard
+              <SeriesGroup
                 key={g.key}
                 group={g}
                 expanded={expandedSeries === g.key}
@@ -450,8 +383,8 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
                 setConfirmingId={setConfirmingId}
                 busyId={busyId}
                 onCancel={handleCancel}
-                onCancelSeries={handleCancelSeries}
                 onEdit={setEditing}
+                onManage={onManageSchedules}
               />
             ))}
           </Section>

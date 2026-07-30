@@ -52,4 +52,35 @@ const generateConfirmationCode = (length = 8) => {
   return code;
 };
 
-module.exports = { rowToReservation, toTimestamps, generateConfirmationCode, toDateString };
+// A code that exists in neither table.
+//
+// Booking codes live on reservations and schedule codes on recurring_schedules,
+// so there are two unique constraints and neither can see the other. Eight
+// characters of a 31-letter alphabet make a collision vanishingly unlikely, but
+// "unlikely" is the wrong guarantee for the value a person reads out at the desk
+// to check in: one collision would make a code ambiguous between somebody's
+// Tuesday booking and somebody else's whole schedule. Cheaper to ask.
+async function generateUniqueCode(client, { length = 8, attempts = 10 } = {}) {
+  for (let i = 0; i < attempts; i += 1) {
+    const code = generateConfirmationCode(length);
+    const { rows } = await client.query(
+      `SELECT 1 FROM reservations WHERE confirmation_code = $1
+        UNION ALL
+       SELECT 1 FROM recurring_schedules WHERE series_code = $1
+       LIMIT 1`,
+      [code]
+    );
+    if (rows.length === 0) return code;
+  }
+  // Ten collisions in a row means the alphabet is exhausted or something is
+  // badly wrong; failing loudly beats returning a duplicate.
+  throw new Error('Could not generate an unused confirmation code.');
+}
+
+module.exports = {
+  rowToReservation,
+  toTimestamps,
+  generateConfirmationCode,
+  generateUniqueCode,
+  toDateString,
+};

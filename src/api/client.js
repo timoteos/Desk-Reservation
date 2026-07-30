@@ -110,8 +110,18 @@ export const login = (email, password) =>
 
 export const getCurrentAdmin = () => request('/api/auth/me');
 
+// Cancels whatever the code stands for: a single booking, or a whole schedule.
+// The response says which in `kind`.
 export const cancelReservation = (code) =>
   request(`/api/reservations/code/${encodeURIComponent(code)}/cancel`, { method: 'PATCH' });
+
+// One day of a schedule, for the week someone is on leave. The schedule's own
+// code is the credential — occurrences never carry one of their own.
+export const cancelScheduleDay = (code, occurrenceId) =>
+  request(
+    `/api/reservations/code/${encodeURIComponent(code)}/occurrence/${encodeURIComponent(occurrenceId)}/cancel`,
+    { method: 'PATCH' }
+  );
 
 export const adminBook = (payload) =>
   request('/api/requests/book', { method: 'POST', body: JSON.stringify(payload) });

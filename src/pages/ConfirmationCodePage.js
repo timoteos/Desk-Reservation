@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Ticket, CheckCircle2, XCircle } from 'lucide-react';
+import ScheduleResult from '../components/ScheduleResult';
 import Breadcrumb from '../components/Breadcrumb';
 import { getReservationByCode, cancelReservation, ApiError } from '../api/client';
 
@@ -78,15 +79,19 @@ export default function ConfirmationCodePage() {
     }
   };
 
+  // Re-read rather than patching locally, so what is shown comes from the server
+  // and cannot drift from what actually happened.
+  const refresh = async () => {
+    setBooking(await getReservationByCode(booking.confirmationCode));
+  };
+
   const handleCancelReservation = async () => {
     if (canceling) return;
     setCanceling(true);
     setCancelError(null);
     try {
       await cancelReservation(booking.confirmationCode);
-      // Re-read rather than patching locally, so the shown status comes from
-      // the server and can't drift from what actually happened.
-      setBooking(await getReservationByCode(booking.confirmationCode));
+      await refresh();
       setConfirmingCancel(false);
     } catch (err) {
       setCancelError(err.message);
@@ -114,7 +119,8 @@ export default function ConfirmationCodePage() {
           <div className="text-center">
             <h1 className="text-mqd-title text-2xl font-bold">Confirmation Code</h1>
             <p className="text-ink-muted text-sm mt-1">
-              Enter the confirmation code from your reservation email to view your booking.
+              Enter the confirmation code from your reservation email to view your booking
+              or your recurring schedule.
             </p>
           </div>
 
@@ -152,7 +158,56 @@ export default function ConfirmationCodePage() {
             </div>
           </form>
 
-          {result === 'found' && booking && (
+          {result === 'found' && booking?.kind === 'schedule' && (
+            <>
+              <ScheduleResult schedule={booking} onChanged={refresh} />
+
+              {['pending', 'approved'].includes(booking.status) && (
+                <div className="w-full">
+                  {cancelError && (
+                    <p className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm mb-3">
+                      {cancelError}
+                    </p>
+                  )}
+                  {confirmingCancel ? (
+                    <div className="border border-surface-line rounded-lg p-4 flex flex-col gap-3">
+                      <p className="text-ink-body text-sm">
+                        End this schedule for good? That releases the{' '}
+                        {booking.bookingsRemaining} day
+                        {booking.bookingsRemaining === 1 ? '' : 's'} still to come and gives up
+                        the desk. Days you have already worked are kept. This can't be undone.
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleCancelReservation}
+                          disabled={canceling}
+                          className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white text-sm font-semibold py-2.5 rounded-lg transition"
+                        >
+                          {canceling ? 'Ending…' : 'Yes, end it'}
+                        </button>
+                        <button
+                          onClick={() => setConfirmingCancel(false)}
+                          disabled={canceling}
+                          className="flex-1 border border-surface-line hover:bg-surface-panel disabled:opacity-40 text-ink-body text-sm font-semibold py-2.5 rounded-lg transition"
+                        >
+                          Keep it
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { setConfirmingCancel(true); setCancelError(null); }}
+                      className="w-full border border-red-300 text-red-700 hover:bg-red-50 text-sm font-semibold py-2.5 rounded-lg transition"
+                    >
+                      End this whole schedule
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
+          {result === 'found' && booking && booking.kind !== 'schedule' && (
             <div className="flex flex-col items-center gap-2 text-center py-2 border-t border-surface-line pt-5">
               <CheckCircle2 className="w-10 h-10 text-mqd-title" />
               <p className="text-mqd-title font-semibold">Reservation found</p>

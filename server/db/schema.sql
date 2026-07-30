@@ -62,6 +62,17 @@ CREATE TABLE recurring_schedules (
   -- schedule needs a real identity, so this is it. Null until the first row of a
   -- series is inserted, then set to that row's id.
   series_id     INTEGER REFERENCES recurring_schedules(schedule_id),
+  -- One code for the whole arrangement, held on its first row.
+  --
+  -- Every occurrence carries a confirmation code of its own, because each is a
+  -- reservation row and the column is NOT NULL — but handing 39 of them to one
+  -- intern was never a design, it was what fell out of generating 39 rows. A
+  -- schedule is one thing to the person who holds it, so it gets one code: the
+  -- code is what they check in with, and it stays the same when an admin moves
+  -- the desk or the hours. Null on the other weekday rows of the same series,
+  -- which is why UNIQUE rather than a partial index — Postgres allows repeated
+  -- nulls in a unique constraint.
+  series_code   TEXT UNIQUE,
   day_of_week   SMALLINT NOT NULL CHECK (day_of_week BETWEEN 1 AND 5),
   start_time    TIME NOT NULL,
   end_time      TIME NOT NULL,

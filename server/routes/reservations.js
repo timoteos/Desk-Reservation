@@ -1,14 +1,16 @@
 const express = require('express');
-const { query } = require('../db');
+const { pool, query } = require('../db');
 const {
   rowToReservation,
   toTimestamps,
   generateConfirmationCode,
+  toDateString,
 } = require('../lib/reservationShape');
 const { expirePending, expiryFor } = require('../lib/expirePending');
 const { recordActivity } = require('../lib/activityLog');
 const { officeHoursError, workingDayError } = require('../lib/officeHours');
 const { bookableDeskError } = require('../lib/deskGuard');
+const { endSeries } = require('../lib/endSeries');
 
 const router = express.Router();
 
@@ -101,18 +103,124 @@ router.get('/', async (req, res, next) => {
   }
 });
 
+const minutesFrom = (time) => {
+  const [h, m] = time.split(':').map(Number);
+  return h * 60 + m;
+};
+
+const DAY_LABELS = {
+  1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday',
+};
+
+const minutesOfDay = (ts) => new Date(ts).getHours() * 60 + new Date(ts).getMinutes();
+
+// A whole arrangement, found by the one code its holder was given.
+//
+// Returns null rather than throwing when the code is not a schedule code, so the
+// caller can fall through to the booking lookup. The pattern is read from the
+// live weekday rows, which is what the Schedules tab does — a weekday dropped by
+// an edit is cancelled rather than deleted, and it should not show here.
+async function scheduleByCode(code) {
+  const { rows } = await query(
+    `SELECT lead.schedule_id, lead.series_code, lead.status,
+            u.first_name, u.last_name,
+            d.desk_number,
+            min(s.active_from) FILTER (WHERE s.status <> 'canceled')  AS active_from,
+            max(s.active_until) FILTER (WHERE s.status <> 'canceled') AS active_until,
+            bool_or(s.active_until IS NULL) FILTER (WHERE s.status <> 'canceled') AS open_ended,
+            array_agg(s.day_of_week ORDER BY s.day_of_week)
+              FILTER (WHERE s.status <> 'canceled')  AS days,
+            array_agg(s.start_time::text ORDER BY s.day_of_week)
+              FILTER (WHERE s.status <> 'canceled')  AS start_times,
+            array_agg(s.end_time::text ORDER BY s.day_of_week)
+              FILTER (WHERE s.status <> 'canceled')  AS end_times
+       FROM recurring_schedules lead
+       JOIN recurring_schedules s ON s.series_id = lead.series_id
+       JOIN users u ON u.user_id = lead.user_id
+       LEFT JOIN desks d ON d.desk_id = lead.desk_id
+      WHERE lead.series_code = $1
+      GROUP BY lead.schedule_id, lead.series_code, lead.status,
+               u.first_name, u.last_name, d.desk_number`,
+    [code]
+  );
+
+  if (rows.length === 0) return null;
+  const row = rows[0];
+
+  // The days still to come, and today's separately. Per-occurrence confirmation
+  // codes are deliberately not selected: they exist because the column is NOT
+  // NULL, not because anyone should be handed 39 of them.
+  const { rows: occurrences } = await query(
+    `SELECT r.reservation_id, r.starts_at, r.ends_at, r.status
+       FROM reservations r
+       JOIN recurring_schedules s ON s.schedule_id = r.schedule_id
+      WHERE s.series_id = (SELECT series_id FROM recurring_schedules WHERE schedule_id = $1)
+        AND r.status IN ('pending', 'approved')
+        AND r.ends_at > now()
+      ORDER BY r.starts_at`,
+    [row.schedule_id]
+  );
+
+  const shape = (o) => ({
+    id: o.reservation_id,
+    date: toDateString(o.starts_at),
+    startMin: minutesOfDay(o.starts_at),
+    endMin: minutesOfDay(o.ends_at),
+    status: o.status,
+  });
+
+  const today = toDateString(new Date());
+  const upcoming = occurrences.map(shape);
+
+  return {
+    kind: 'schedule',
+    scheduleId: row.schedule_id,
+    confirmationCode: row.series_code,
+    user: `${row.first_name} ${row.last_name}`,
+    deskNumber: row.desk_number,
+    status: row.status,
+    activeFrom: row.active_from ? toDateString(row.active_from) : null,
+    activeUntil: row.open_ended || !row.active_until ? null : toDateString(row.active_until),
+    openEnded: !!row.open_ended,
+    pattern: (row.days ?? []).map((day, i) => ({
+      day: DAY_LABELS[day],
+      dayNumber: day,
+      startMin: minutesFrom(row.start_times[i]),
+      endMin: minutesFrom(row.end_times[i]),
+    })),
+    // What a check-in will need: this code, resolved to the day in progress.
+    today: upcoming.find((o) => o.date === today) ?? null,
+    upcoming,
+    bookingsRemaining: upcoming.length,
+  };
+}
+
 // GET /api/reservations/code/:code
+//
+// A code is either a single booking or a whole schedule, and the holder should
+// not have to know which — they were given one code and they type it in. The
+// response says which it turned out to be in `kind`.
+//
+// A schedule comes back as the arrangement plus the days it still has coming,
+// never as a list of codes. `today` is called out separately because that is
+// what a check-in needs: the same code, used at the door, has to resolve to the
+// occurrence happening now rather than to the pattern in the abstract.
 router.get('/code/:code', async (req, res, next) => {
   try {
+    const code = req.params.code.trim().toUpperCase();
+
     const result = await query(
       `${SELECT_RESERVATION} WHERE r.confirmation_code = $1`,
-      [req.params.code.trim().toUpperCase()]
+      [code]
     );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Reservation not found' });
+    if (result.rows.length > 0) {
+      return res.json({ kind: 'booking', ...rowToReservation(result.rows[0]) });
     }
-    res.json(rowToReservation(result.rows[0]));
+
+    const schedule = await scheduleByCode(code);
+    if (schedule) return res.json(schedule);
+
+    return res.status(404).json({ message: 'Reservation not found' });
   } catch (err) {
     next(err);
   }
@@ -124,6 +232,40 @@ router.get('/code/:code', async (req, res, next) => {
 // reference. Codes are random 8-character strings, so they aren't guessable.
 router.patch('/code/:code/cancel', async (req, res, next) => {
   try {
+    const code = req.params.code.trim().toUpperCase();
+
+    // A schedule code ends the arrangement, which is a bigger thing than
+    // cancelling a booking — the caller is told exactly how many days that
+    // released so the page can say so before and after.
+    const schedule = await scheduleByCode(code);
+    if (schedule) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const result = await endSeries(client, {
+          scheduleId: schedule.scheduleId,
+          byCode: true,
+        });
+        if (!result) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({
+            message: 'That schedule has already ended.',
+          });
+        }
+        await client.query('COMMIT');
+        return res.json({
+          kind: 'schedule',
+          status: 'canceled',
+          bookingsCanceled: result.bookingsCanceled,
+        });
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+    }
+
     const { rows } = await query(
       `UPDATE reservations
           SET status = 'canceled', expires_at = NULL
@@ -131,7 +273,7 @@ router.patch('/code/:code/cancel', async (req, res, next) => {
           AND status IN ('pending', 'approved')
           AND ends_at > now()
         RETURNING reservation_id`,
-      [req.params.code.trim().toUpperCase()]
+      [code]
     );
 
     if (rows.length === 0) {
@@ -148,7 +290,53 @@ router.patch('/code/:code/cancel', async (req, res, next) => {
       description: 'Cancelled using the confirmation code',
     });
 
-    res.json({ status: 'canceled' });
+    res.json({ kind: 'booking', status: 'canceled' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /api/reservations/code/:code/occurrence/:id/cancel
+//
+// One day of a schedule, for the week the holder is on leave. The schedule code
+// stays the credential and the occurrence is named by id, so cancelling a single
+// Tuesday never requires handing out a code per day.
+//
+// The id is checked against the series the code opens, so a valid code cannot be
+// pointed at somebody else's booking.
+router.patch('/code/:code/occurrence/:id/cancel', async (req, res, next) => {
+  try {
+    const code = req.params.code.trim().toUpperCase();
+
+    const { rows } = await query(
+      `UPDATE reservations r
+          SET status = 'canceled', expires_at = NULL
+        FROM recurring_schedules s, recurring_schedules lead
+        WHERE r.reservation_id = $1
+          AND s.schedule_id = r.schedule_id
+          AND lead.series_code = $2
+          AND s.series_id = lead.series_id
+          AND r.status IN ('pending', 'approved')
+          AND r.starts_at > now()
+        RETURNING r.reservation_id, r.starts_at`,
+      [req.params.id, code]
+    );
+
+    if (rows.length === 0) {
+      // Wrong code, wrong series, already cancelled, or the day has started.
+      // One message, so the endpoint cannot be used to probe which.
+      return res.status(409).json({
+        message: 'That day can no longer be canceled. It may already be canceled, or it has started.',
+      });
+    }
+
+    await recordActivity({
+      activityType: 'canceled',
+      reservationId: rows[0].reservation_id,
+      description: 'One day of a recurring schedule cancelled using the confirmation code',
+    });
+
+    res.json({ kind: 'occurrence', status: 'canceled', date: toDateString(rows[0].starts_at) });
   } catch (err) {
     next(err);
   }
