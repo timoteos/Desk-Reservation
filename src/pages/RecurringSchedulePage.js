@@ -8,7 +8,9 @@ import {
   OFFICE_START as OFFICE_START_MIN,
   OFFICE_END as OFFICE_END_MIN,
   OFFICE_HOURS_LABEL,
+  SLOT_MINUTES,
   toTimeValue,
+  timeOptions,
 } from '../lib/officeHours';
 
 const CRUMBS = [
@@ -59,6 +61,10 @@ export default function RecurringSchedulePage() {
   const [deskId, setDeskId] = useState(null);
   const [availability, setAvailability] = useState(null);
   const [loadingDesks, setLoadingDesks] = useState(false);
+  // Why the preview failed. Discarding it left the desk section showing a
+  // loading message indefinitely, with nothing to say the request had failed
+  // rather than being slow — and the reason only arriving after submitting.
+  const [availabilityError, setAvailabilityError] = useState(null);
   const [result, setResult] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -72,6 +78,7 @@ export default function RecurringSchedulePage() {
 
     let cancelled = false;
     setLoadingDesks(true);
+    setAvailabilityError(null);
 
     const days = {};
     keys.forEach((key) => {
@@ -93,7 +100,11 @@ export default function RecurringSchedulePage() {
           return still && still.bookable > 0 ? current : null;
         });
       })
-      .catch(() => { if (!cancelled) setAvailability(null); })
+      .catch((err) => {
+        if (cancelled) return;
+        setAvailability(null);
+        setAvailabilityError(err.message);
+      })
       .finally(() => { if (!cancelled) setLoadingDesks(false); });
 
     return () => { cancelled = true; };
@@ -112,17 +123,25 @@ export default function RecurringSchedulePage() {
     });
   };
 
+  // Moving a start past its end drags the end along, so a day can never
+  // describe an impossible window — the same behaviour as every other time
+  // control in the app.
   const updateDayTime = (key, field, value) => {
-    setSchedule((prev) => ({
-      ...prev,
-      [key]: { ...prev[key], [field]: value },
-    }));
+    setSchedule((prev) => {
+      const day = { ...prev[key], [field]: value };
+      if (field === 'start' && toMinutes(day.end) <= toMinutes(value)) {
+        day.end = toTimeValue(Math.min(toMinutes(value) + SLOT_MINUTES, OFFICE_END_MIN));
+      }
+      return { ...prev, [key]: day };
+    });
   };
 
   const selectedKeys = Object.keys(schedule);
   const allValid = selectedKeys.every((key) => schedule[key].start < schedule[key].end);
   const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  const canSubmit = selectedKeys.length > 0 && allValid && isValidEmail && !submitting;
+  // No point submitting a pattern the server has already refused to price.
+  const canSubmit =
+    selectedKeys.length > 0 && allValid && isValidEmail && !submitting && !availabilityError;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -283,34 +302,38 @@ export default function RecurringSchedulePage() {
                   <p className="text-ink-body font-medium -mb-1">Time per day</p>
                   {selectedDays.map((day) => {
                     const { start, end } = schedule[day.key];
-                    const isValid = start < end;
                     return (
                       <div key={day.key} className="border border-surface-line rounded-lg p-3">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                           <span className="text-ink-body font-medium text-sm sm:w-24 shrink-0">{day.label}</span>
                           <div className="flex items-center gap-2 flex-1">
-                            <input
-                              type="time"
+                            {/* Selects, as everywhere else. min and max on a time
+                                input constrain the range but not the step, so
+                                9:07 passed native validation and only the server
+                                refused it. An option never offered cannot be
+                                chosen, and the end list starts after the start so
+                                an impossible window is unreachable. */}
+                            <select
                               value={start}
-                              min={OFFICE_START}
-                              max={OFFICE_END}
                               onChange={(e) => updateDayTime(day.key, 'start', e.target.value)}
-                              className="flex-1 min-w-0 border border-surface-line rounded-lg px-3 py-2 text-ink-body text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
-                            />
+                              className="flex-1 min-w-0 border border-surface-line rounded-lg px-3 py-2 text-ink-body text-sm bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                            >
+                              {timeOptions({ to: OFFICE_END_MIN - SLOT_MINUTES }).map((o) => (
+                                <option key={o.value} value={toTimeValue(o.value)}>{o.label}</option>
+                              ))}
+                            </select>
                             <span className="text-ink-muted text-sm shrink-0">to</span>
-                            <input
-                              type="time"
+                            <select
                               value={end}
-                              min={OFFICE_START}
-                              max={OFFICE_END}
                               onChange={(e) => updateDayTime(day.key, 'end', e.target.value)}
-                              className="flex-1 min-w-0 border border-surface-line rounded-lg px-3 py-2 text-ink-body text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
-                            />
+                              className="flex-1 min-w-0 border border-surface-line rounded-lg px-3 py-2 text-ink-body text-sm bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                            >
+                              {timeOptions({ from: toMinutes(start) + SLOT_MINUTES }).map((o) => (
+                                <option key={o.value} value={toTimeValue(o.value)}>{o.label}</option>
+                              ))}
+                            </select>
                           </div>
                         </div>
-                        {!isValid && (
-                          <p className="text-red-500 text-xs mt-2">End time must be after start time.</p>
-                        )}
                       </div>
                     );
                   })}
@@ -341,11 +364,19 @@ export default function RecurringSchedulePage() {
                   <p className="text-ink-body font-medium mb-1">
                     Pick a desk <span className="text-ink-muted font-normal">— optional</span>
                   </p>
-                  <p className="text-ink-muted text-xs mb-2">
-                    {availability
-                      ? `${availability.occurrences} booking${availability.occurrences === 1 ? '' : 's'} in this pattern. Amber desks are free for some of them, not all.`
-                      : 'Working out what each desk can offer…'}
-                  </p>
+                  {availabilityError ? (
+                    <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm mb-2">
+                      {availabilityError}
+                    </p>
+                  ) : (
+                    <p className="text-ink-muted text-xs mb-2">
+                      {availability
+                        ? `${availability.occurrences} booking${availability.occurrences === 1 ? '' : 's'} in this pattern. Amber desks are free for some of them, not all.`
+                        : loadingDesks
+                          ? 'Working out what each desk can offer…'
+                          : 'Pick your days and times to see which desks are free.'}
+                    </p>
+                  )}
 
                   <DeskMap
                     desks={(availability?.desks ?? []).map((d) => ({
