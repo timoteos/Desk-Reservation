@@ -118,6 +118,11 @@ export const login = (email, password) =>
 
 export const getCurrentAdmin = () => request('/api/auth/me');
 
+// Check-in takes no token: the confirmation code is the credential, and it is
+// the only one a sponsored visitor will ever have.
+export const checkIn = (code) =>
+  request(`/api/reservations/code/${encodeURIComponent(code)}/check-in`, { method: 'POST' });
+
 // Cancels whatever the code stands for: a single booking, or a whole schedule.
 // The response says which in `kind`.
 export const cancelReservation = (code) =>
