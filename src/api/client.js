@@ -120,6 +120,17 @@ export const getCurrentAdmin = () => request('/api/auth/me');
 
 // Check-in takes no token: the confirmation code is the credential, and it is
 // the only one a sponsored visitor will ever have.
+// The floor as it stands. No names — this feeds a screen anybody can walk up to.
+export const getDeskStatus = () => request('/api/desks/status');
+
+// Taking a desk you are standing at. Today, starting now, no approval: being
+// physically present is the authorisation.
+export const claimDesk = (deskNumber, payload) =>
+  request(`/api/desks/${encodeURIComponent(deskNumber)}/claim`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
 export const checkIn = (code) =>
   request(`/api/reservations/code/${encodeURIComponent(code)}/check-in`, { method: 'POST' });
 

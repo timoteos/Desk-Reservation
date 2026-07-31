@@ -2,11 +2,18 @@ import { useState, useEffect, useRef } from 'react';
 import { CheckCircle2, XCircle, DoorOpen } from 'lucide-react';
 import { checkIn } from '../api/client';
 import { formatMinutes } from '../lib/officeHours';
+import LiveFloor from '../components/LiveFloor';
 
 // How long a result stays on screen before the page returns to the prompt.
 // This is a shared screen in a lobby: the previous person's name and desk
 // number must not still be there when the next one walks up.
 const CLEAR_AFTER_MS = 12000;
+
+// Longer when a confirmation code is on screen. Checking in only tells you a
+// desk number you are about to walk to; claiming a desk hands you the only
+// credential you will ever have for that booking, and twelve seconds is not
+// long enough to write one down.
+const CLEAR_WITH_CODE_MS = 45000;
 
 // The front desk.
 //
@@ -37,7 +44,10 @@ export default function FrontDeskPage() {
   // cannot fire into a page that has gone.
   useEffect(() => {
     if (!result && !error) return undefined;
-    timerRef.current = setTimeout(reset, CLEAR_AFTER_MS);
+    timerRef.current = setTimeout(
+      reset,
+      result?.confirmationCode ? CLEAR_WITH_CODE_MS : CLEAR_AFTER_MS
+    );
     return () => clearTimeout(timerRef.current);
   }, [result, error]);
 
@@ -60,9 +70,10 @@ export default function FrontDeskPage() {
   };
 
   return (
-    <div className="flex-1 flex items-center justify-center px-4 py-10 bg-surface-page">
-      <div className="w-full max-w-xl">
+    <div className="flex-1 flex items-start justify-center px-4 py-10 bg-surface-page">
+      <div className="w-full max-w-5xl">
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         {result ? (
           <div className="bg-white rounded-2xl shadow-modal p-8 flex flex-col items-center gap-4 text-center">
             <CheckCircle2 className="w-16 h-16 text-mqd-btn" />
@@ -80,6 +91,21 @@ export default function FrontDeskPage() {
                 {formatMinutes(result.startMin)} – {formatMinutes(result.endMin)}
               </p>
             </div>
+
+            {/* A walk-up is issued a code here and nowhere else — nothing emails
+                it yet, so if this screen does not show it, the person leaves
+                with a booking they can never look up. */}
+            {result.confirmationCode && (
+              <div className="w-full">
+                <p className="text-ink-muted text-xs uppercase tracking-wide">Your confirmation code</p>
+                <p className="font-mono text-2xl tracking-[0.25em] text-mqd-title select-all">
+                  {result.confirmationCode}
+                </p>
+                <p className="text-ink-muted text-xs mt-1">
+                  Write this down — it is how you check or change this booking.
+                </p>
+              </div>
+            )}
 
             {result.reclaimed && (
               <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm">
@@ -140,6 +166,14 @@ export default function FrontDeskPage() {
             </p>
           </form>
         )}
+
+        {/* The floor, live. Somebody arriving without a booking has somewhere to
+            go, and somebody who does have one can see they are heading to a desk
+            that is actually theirs. */}
+        <div className="bg-white rounded-2xl shadow-modal p-6">
+          <LiveFloor onClaimed={setResult} />
+        </div>
+      </div>
       </div>
     </div>
   );

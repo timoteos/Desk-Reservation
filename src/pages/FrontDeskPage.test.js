@@ -85,3 +85,28 @@ test('it offers no way to cancel a booking', async () => {
 
   expect(screen.queryByRole('button', { name: /cancel/i })).not.toBeInTheDocument();
 });
+
+test('a walk-up is shown the code it was issued, and given time to write it down', async () => {
+  // Nothing emails a code yet. If this screen does not show it, the person
+  // walks away with a booking they have no way to reach again.
+  jest.useFakeTimers();
+  try {
+    const { rerender } = render(<FrontDeskPage />);
+    api.checkIn.mockResolvedValue({ ...CHECKED_IN, confirmationCode: 'WALK0001' });
+    enter('IGNORED1');
+    await act(async () => { await Promise.resolve(); });
+
+    expect(screen.getByText('WALK0001')).toBeInTheDocument();
+    expect(screen.getByText(/write this down/i)).toBeInTheDocument();
+
+    // Still there after the ordinary twelve seconds.
+    act(() => { jest.advanceTimersByTime(12000); });
+    expect(screen.getByText('WALK0001')).toBeInTheDocument();
+
+    act(() => { jest.advanceTimersByTime(33000); });
+    expect(screen.queryByText('WALK0001')).not.toBeInTheDocument();
+    rerender(<FrontDeskPage />);
+  } finally {
+    jest.useRealTimers();
+  }
+});

@@ -1,0 +1,128 @@
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import LiveFloor from './LiveFloor';
+import * as api from '../api/client';
+
+jest.mock('../api/client');
+
+const FLOOR = {
+  nowMin: 700,
+  desks: [
+    { id: '1', number: 1, label: 'Desk# 1', status: 'in_use', untilMin: 1020 },
+    { id: '2', number: 2, label: 'Desk# 2', status: 'reserved', untilMin: 840 },
+    { id: '3', number: 3, label: 'Desk# 3', status: 'free', freeUntilMin: 780 },
+    { id: '4', number: 4, label: 'Desk# 4', status: 'free', freeUntilMin: 1020 },
+  ],
+};
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  api.getDeskStatus.mockResolvedValue(FLOOR);
+  api.claimDesk.mockResolvedValue({
+    confirmationCode: 'WALK0001', name: 'Mark Burgess',
+    deskNumber: 4, startMin: 700, endMin: 1020,
+  });
+});
+
+test('it counts what is actually free, not what is merely unbooked', async () => {
+  render(<LiveFloor />);
+  expect(await screen.findByText('2 of 4 desks free right now')).toBeInTheDocument();
+});
+
+test('a free desk can be taken; one in use cannot', async () => {
+  render(<LiveFloor />);
+  await screen.findByText(/2 of 4 desks free/);
+
+  expect(screen.getByLabelText('Desk 4, free')).toBeEnabled();
+  expect(screen.getByLabelText('Desk 1, in use')).toBeDisabled();
+  expect(screen.getByLabelText(/Desk 2, reserved/)).toBeDisabled();
+});
+
+test('choosing a desk says how long it is actually yours for', async () => {
+  render(<LiveFloor />);
+  await screen.findByText(/2 of 4 desks free/);
+
+  // Desk 3 is booked by somebody else at 1pm, so the offer has to stop there.
+  fireEvent.click(screen.getByLabelText('Desk 3, free'));
+  expect(await screen.findByText(/until 1:00 PM, when it is booked/)).toBeInTheDocument();
+
+  // Desk 4 runs to the end of the day, so there is nothing to warn about.
+  fireEvent.click(screen.getByLabelText('Desk 4, free'));
+  expect(await screen.findByText(/until 5:00 PM\./)).toBeInTheDocument();
+});
+
+test('taking a desk sends the desk and the address, and reports back', async () => {
+  const onClaimed = jest.fn();
+  render(<LiveFloor onClaimed={onClaimed} />);
+  await screen.findByText(/2 of 4 desks free/);
+
+  fireEvent.click(screen.getByLabelText('Desk 4, free'));
+  fireEvent.change(screen.getByLabelText(/your email address/i), {
+    target: { value: 'mark.burgess@dhs.hawaii.gov' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: /take desk# 4/i }));
+
+  await waitFor(() => expect(api.claimDesk).toHaveBeenCalledWith(4, {
+    email: 'mark.burgess@dhs.hawaii.gov',
+  }));
+  await waitFor(() => expect(onClaimed).toHaveBeenCalled());
+});
+
+test('losing the desk to somebody else is explained, and the floor re-read', async () => {
+  api.claimDesk.mockRejectedValue(new Error('Somebody just took that desk. Pick another.'));
+  render(<LiveFloor />);
+  await screen.findByText(/2 of 4 desks free/);
+
+  fireEvent.click(screen.getByLabelText('Desk 4, free'));
+  fireEvent.change(screen.getByLabelText(/your email address/i), {
+    target: { value: 'mark.burgess@dhs.hawaii.gov' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: /take desk# 4/i }));
+
+  expect(await screen.findByText(/Somebody just took that desk/)).toBeInTheDocument();
+  // Re-read, so whoever took it is now visible rather than the screen insisting
+  // the desk is still free.
+  await waitFor(() => expect(api.getDeskStatus).toHaveBeenCalledTimes(2));
+});
+
+test('when the network drops it says so instead of insisting desks are free', async () => {
+  jest.useFakeTimers();
+  try {
+    render(<LiveFloor />);
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByText(/2 of 4 desks free/)).toBeInTheDocument();
+
+    api.getDeskStatus.mockRejectedValue(new Error('Cannot reach the server.'));
+    await act(async () => { jest.advanceTimersByTime(20000); await Promise.resolve(); });
+
+    expect(screen.getByText(/Can.t reach the system/)).toBeInTheDocument();
+    // The last known floor is still drawn — blanking it would be less useful,
+    // but it is no longer claimed to be current.
+    expect(screen.getByText(/2 of 4 desks free/)).toBeInTheDocument();
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('it keeps refreshing on its own', async () => {
+  jest.useFakeTimers();
+  try {
+    render(<LiveFloor />);
+    await act(async () => { await Promise.resolve(); });
+    expect(api.getDeskStatus).toHaveBeenCalledTimes(1);
+
+    await act(async () => { jest.advanceTimersByTime(20000); await Promise.resolve(); });
+    expect(api.getDeskStatus).toHaveBeenCalledTimes(2);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('a full floor says so rather than inviting a tap that cannot work', async () => {
+  api.getDeskStatus.mockResolvedValue({
+    nowMin: 700,
+    desks: FLOOR.desks.map((d) => ({ ...d, status: 'in_use', untilMin: 1020 })),
+  });
+  render(<LiveFloor />);
+
+  expect(await screen.findByText(/Every desk is taken at the moment/)).toBeInTheDocument();
+});
