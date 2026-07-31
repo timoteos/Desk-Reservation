@@ -56,10 +56,28 @@ function BookingCard({ r, confirmingId, setConfirmingId, busyId, onCancel, onEdi
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="font-semibold text-ink">{r.user}</p>
+              {/* Amber, unlike the source chips beside it, which are only
+                  distinguishing. This one means something: the person at that
+                  desk is not staff. */}
+              {r.external && (
+                <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded bg-amber-100 text-amber-800">
+                  External
+                </span>
+              )}
               <span className={`text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded ${SOURCE_STYLES[r.bookingSource] || 'bg-surface-panel text-ink-body'}`}>
                 {SOURCE_LABELS[r.bookingSource] || r.bookingSource}
               </span>
             </div>
+
+            {/* Named on the booking, not tucked in a log nobody opens. The point
+                of sponsorship is that the answer to "who let this person in" is
+                visible beside the person. */}
+            {r.external && (
+              <p className="text-amber-800 text-xs mt-0.5">
+                {r.organization ? `${r.organization} · ` : ''}
+                Sponsored by {r.sponsor || 'an administrator no longer on file'}
+              </p>
+            )}
             {/* Date, then time, then desk — when and then where, which is
                 the order someone reads a booking in. */}
             <p className="text-ink-muted text-sm mt-0.5">

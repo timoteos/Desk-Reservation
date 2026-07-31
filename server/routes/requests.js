@@ -13,6 +13,25 @@ const router = express.Router();
 // The whole approval queue is administrative — nothing here is public.
 router.use(requireAdmin);
 
+// What has to be true of an external visitor before an admin can vouch for one.
+// An address is required because the confirmation code is the only way a guest
+// can ever reach their booking — this is an internal application and they have
+// no other way in — so a visitor with no address has no route to their own desk.
+function guestDetailsError(guest) {
+  const has = (v) => typeof v === 'string' && v.trim().length > 0;
+
+  if (!has(guest.firstName) || !has(guest.lastName)) {
+    return 'A visitor needs a first and last name.';
+  }
+  if (!has(guest.email)) {
+    return 'A visitor needs an email address — it is the only way they can reach their booking.';
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guest.email.trim())) {
+    return 'That email address does not look right.';
+  }
+  return null;
+}
+
 const DAY_LABELS = { 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday' };
 
 const minutesFrom = (time) => {
@@ -132,15 +151,30 @@ const resolveDecider = (req) => req.user?.sub ?? null;
 // An admin booking, for themselves or on someone's behalf. Created approved
 // rather than pending: the admin is the approver, so routing it through their
 // own queue would be theatre. Recorded as decided by them for the audit trail.
+// `guest` books somebody who is not in the system: an external visitor an admin
+// is vouching for. The sponsor is always the admin holding the token and is
+// never read from the body — letting a caller name who is responsible would
+// make the field worthless as a record.
 router.post('/book', async (req, res, next) => {
+  const client = await pool.connect();
+  let inTransaction = false;
   try {
-    const { userId, deskId, date, startMin, endMin } = req.body;
+    const { userId, guest, deskId, date, startMin, endMin } = req.body;
 
-    if (!userId || !date || startMin == null || endMin == null) {
+    if ((!userId && !guest) || !date || startMin == null || endMin == null) {
       return res.status(400).json({
-        message: 'userId, date, startMin and endMin are required',
+        message: 'date, startMin, endMin and either userId or guest are required',
       });
     }
+
+    if (userId && guest) {
+      return res.status(400).json({
+        message: 'Book a staff member or an external visitor, not both.',
+      });
+    }
+
+    const guestProblem = guest ? guestDetailsError(guest) : null;
+    if (guestProblem) return res.status(400).json({ message: guestProblem });
 
     const dayProblem = workingDayError(date);
     if (dayProblem) return res.status(400).json({ message: dayProblem });
@@ -180,37 +214,121 @@ router.post('/book', async (req, res, next) => {
       resolvedDeskId = rows[0].desk_id;
     }
 
-    const { rows } = await query(
+    const sponsorId = resolveDecider(req);
+
+    // One transaction, because creating a visitor and booking their desk is one
+    // intention. If the desk turns out to be taken, an account left behind would
+    // not only be litter — the email is unique, so the retry would fail on a row
+    // the first attempt created.
+    await client.query('BEGIN');
+    inTransaction = true;
+
+    let bookedForId = userId;
+    let guestRow = null;
+
+    if (guest) {
+      const existing = await client.query(
+        `SELECT u.user_id, u.first_name, u.last_name, u.organization, r.role_type
+           FROM users u JOIN roles r ON r.role_id = u.role_id
+          WHERE lower(u.email) = lower($1)`,
+        [guest.email.trim()]
+      );
+
+      if (existing.rows.length > 0) {
+        // An address already on file. Reuse a returning visitor; refuse a
+        // colleague, because booking a member of staff through the visitor path
+        // would record a sponsor for somebody who does not need one and file
+        // them under external in the log.
+        if (existing.rows[0].role_type !== 'guest') {
+          await client.query('ROLLBACK');
+          inTransaction = false;
+          return res.status(409).json({
+            message: `${guest.email} belongs to ${existing.rows[0].first_name} ${existing.rows[0].last_name}, who is staff. Book them from the staff list instead.`,
+          });
+        }
+        bookedForId = existing.rows[0].user_id;
+        guestRow = existing.rows[0];
+      } else {
+        const created = await client.query(
+          `INSERT INTO users (first_name, last_name, email, organization,
+                              role_id, created_by_user_id, password_hash)
+           VALUES ($1, $2, $3, $4,
+                   (SELECT role_id FROM roles WHERE role_type = 'guest'), $5, NULL)
+           RETURNING user_id, first_name, last_name, organization`,
+          [
+            guest.firstName.trim(),
+            guest.lastName.trim(),
+            guest.email.trim(),
+            guest.organization?.trim() || null,
+            sponsorId,
+          ]
+        );
+        bookedForId = created.rows[0].user_id;
+        guestRow = created.rows[0];
+      }
+    }
+
+    const { rows } = await client.query(
       `INSERT INTO reservations
          (user_id, desk_id, starts_at, ends_at, confirmation_code,
-          status, decided_by_user_id, decided_at, booking_source)
-       VALUES ($1, $2, $3, $4, $5, 'approved', $6, now(), 'admin')
+          status, decided_by_user_id, decided_at, booking_source,
+          sponsored_by_user_id)
+       VALUES ($1, $2, $3, $4, $5, 'approved', $6, now(), 'admin', $7)
        RETURNING reservation_id, confirmation_code`,
-      [userId, resolvedDeskId, startsAt, endsAt, generateConfirmationCode(), resolveDecider(req)]
+      [
+        bookedForId, resolvedDeskId, startsAt, endsAt,
+        generateConfirmationCode(), sponsorId,
+        guest ? sponsorId : null,
+      ]
     );
 
-    const deskRow = await query('SELECT desk_number FROM desks WHERE desk_id = $1', [resolvedDeskId]);
+    const deskRow = await client.query(
+      'SELECT desk_number FROM desks WHERE desk_id = $1',
+      [resolvedDeskId]
+    );
+    const deskNumber = deskRow.rows[0].desk_number;
 
+    // The sponsor goes into the entry itself, not left to be recovered by
+    // joining to a row somebody may later edit. An audit line should still mean
+    // what it meant on the day it was written.
     await recordActivity({
       activityType: 'booked_by_admin',
       reservationId: rows[0].reservation_id,
-      actorUserId: resolveDecider(req),
-      description: `Booked Desk# ${deskRow.rows[0].desk_number} on behalf of a user`,
-    });
+      actorUserId: sponsorId,
+      description: guest
+        ? `Booked Desk# ${deskNumber} for an external visitor and sponsored their access`
+        : `Booked Desk# ${deskNumber} on behalf of a user`,
+      // The organisation comes from the visitor's record, not from what was
+      // typed on this booking. A returning visitor's second booking need not
+      // repeat it, and a log line saying they belong to nowhere would be a
+      // false statement in the one place that is supposed to be reliable.
+      metadata: guest
+        ? { external: true, guestUserId: bookedForId, sponsoredByUserId: sponsorId,
+            organization: guestRow?.organization ?? null }
+        : null,
+    }, client);
+
+    await client.query('COMMIT');
+    inTransaction = false;
 
     res.status(201).json({
       id: String(rows[0].reservation_id),
       confirmationCode: rows[0].confirmation_code,
-      deskNumber: deskRow.rows[0].desk_number,
+      deskNumber,
       status: 'approved',
+      external: Boolean(guest),
+      bookedFor: guestRow ? `${guestRow.first_name} ${guestRow.last_name}` : undefined,
     });
   } catch (err) {
+    if (inTransaction) await client.query('ROLLBACK').catch(() => {});
     if (err.constraint === 'no_double_booking') {
       return res.status(409).json({
         message: 'That desk is already reserved for part of this time range.',
       });
     }
     next(err);
+  } finally {
+    client.release();
   }
 });
 

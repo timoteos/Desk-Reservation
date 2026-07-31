@@ -33,9 +33,17 @@ CREATE TABLE users (
   email         TEXT NOT NULL UNIQUE,
   role_id       INTEGER NOT NULL REFERENCES roles(role_id),
   -- Null for anyone who cannot sign in. Once DHS SSO exists, staff will
-  -- authenticate there and keep a null hash; guests are external to DHS and
-  -- will always need local credentials, so this column outlives SSO.
+  -- authenticate there and keep a null hash. Guests never get one at all:
+  -- this is an internal application, so an external visitor has no way in and
+  -- their confirmation code is permanently their only credential.
   password_hash TEXT,
+  -- Which outside body a guest belongs to — the useful thing to know about a
+  -- visitor that a name does not tell you. Null for staff.
+  organization  TEXT,
+  -- The admin who added this person. Kept for guests, where "who put this
+  -- account here" is a question somebody will eventually ask; null for the
+  -- seeded staff, who predate anyone being able to add a user.
+  created_by_user_id INTEGER REFERENCES users(user_id),
   is_active     BOOLEAN NOT NULL DEFAULT TRUE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -113,6 +121,12 @@ CREATE TABLE reservations (
   -- both record the admin, so the two are indistinguishable without it.
   booking_source     TEXT NOT NULL DEFAULT 'user'
                      CHECK (booking_source IN ('user', 'admin', 'recurring')),
+  -- The admin who vouched for an external visitor occupying this desk. Held on
+  -- the booking rather than on the guest because the responsibility is for a
+  -- visit, not for a person: the same contractor may come in for one admin in
+  -- March and another in June, and each of them answers for their own day.
+  -- Null for staff bookings, which need no sponsor.
+  sponsored_by_user_id INTEGER REFERENCES users(user_id),
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
 
   CONSTRAINT ends_after_start CHECK (ends_at > starts_at),
