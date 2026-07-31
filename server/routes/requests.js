@@ -227,44 +227,77 @@ router.post('/book', async (req, res, next) => {
     let guestRow = null;
 
     if (guest) {
-      const existing = await client.query(
+      const email = guest.email.trim();
+
+      // Case-insensitively, because the unique index is on the literal string
+      // and "Ana@acme.test" would otherwise become a second account for the
+      // same person.
+      const findExisting = () => client.query(
         `SELECT u.user_id, u.first_name, u.last_name, u.organization, r.role_type
            FROM users u JOIN roles r ON r.role_id = u.role_id
           WHERE lower(u.email) = lower($1)`,
-        [guest.email.trim()]
+        [email]
       );
 
-      if (existing.rows.length > 0) {
-        // An address already on file. Reuse a returning visitor; refuse a
-        // colleague, because booking a member of staff through the visitor path
-        // would record a sponsor for somebody who does not need one and file
-        // them under external in the log.
-        if (existing.rows[0].role_type !== 'guest') {
+      // An address already on file. Reuse a returning visitor; refuse a
+      // colleague, because booking a member of staff through the visitor path
+      // would record a sponsor for somebody who does not need one and file
+      // them under external in the log.
+      const useExisting = async (row) => {
+        if (row.role_type !== 'guest') {
           await client.query('ROLLBACK');
           inTransaction = false;
-          return res.status(409).json({
-            message: `${guest.email} belongs to ${existing.rows[0].first_name} ${existing.rows[0].last_name}, who is staff. Book them from the staff list instead.`,
+          res.status(409).json({
+            message: `${email} belongs to ${row.first_name} ${row.last_name}, who is staff. Book them from the staff list instead.`,
           });
+          return false;
         }
-        bookedForId = existing.rows[0].user_id;
-        guestRow = existing.rows[0];
+        bookedForId = row.user_id;
+        guestRow = row;
+        return true;
+      };
+
+      const existing = await findExisting();
+
+      if (existing.rows.length > 0) {
+        if (!(await useExisting(existing.rows[0]))) return;
       } else {
+        // ON CONFLICT rather than a bare INSERT, because the check above and
+        // this write are not one atomic step: two admins booking the same new
+        // visitor at the same moment both found nothing, both inserted, and the
+        // loser hit the unique index and fell through to a 500. It now waits
+        // for the other transaction, does nothing, and reads the row that
+        // transaction committed.
         const created = await client.query(
           `INSERT INTO users (first_name, last_name, email, organization,
                               role_id, created_by_user_id, password_hash)
            VALUES ($1, $2, $3, $4,
                    (SELECT role_id FROM roles WHERE role_type = 'guest'), $5, NULL)
+           ON CONFLICT (email) DO NOTHING
            RETURNING user_id, first_name, last_name, organization`,
           [
             guest.firstName.trim(),
             guest.lastName.trim(),
-            guest.email.trim(),
+            email,
             guest.organization?.trim() || null,
             sponsorId,
           ]
         );
-        bookedForId = created.rows[0].user_id;
-        guestRow = created.rows[0];
+
+        if (created.rows.length > 0) {
+          bookedForId = created.rows[0].user_id;
+          guestRow = created.rows[0];
+        } else {
+          const raced = await findExisting();
+          if (raced.rows.length === 0) {
+            await client.query('ROLLBACK');
+            inTransaction = false;
+            return res.status(409).json({
+              message: 'That visitor could not be created. Try again.',
+            });
+          }
+          if (!(await useExisting(raced.rows[0]))) return;
+        }
       }
     }
 

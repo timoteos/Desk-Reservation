@@ -82,3 +82,14 @@ test('the responsibility notice names what is being taken on', async () => {
   expect(screen.getByText(/you are sponsoring this visitor/i)).toBeInTheDocument();
   expect(screen.getByText(/accountable/i)).toBeInTheDocument();
 });
+
+test('a visitor whose details are half-filled cannot be booked', async () => {
+  // The acceptance box is not the only gate — an admin who ticks it before
+  // filling the form should still not be able to submit a nameless visitor.
+  open();
+  fireEvent.click(await screen.findByRole('button', { name: /external visitor/i }));
+  fireEvent.change(screen.getByLabelText(/visitor first name/i), { target: { value: 'Ana' } });
+  fireEvent.click(screen.getByRole('checkbox'));
+
+  expect(screen.getByRole('button', { name: /^book (desk#|any free desk)/i })).toBeDisabled();
+});
