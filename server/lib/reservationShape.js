@@ -32,6 +32,15 @@ const rowToReservation = (row) => ({
   userId: row.user_id,
   deskNumber: row.desk_number,
   deskId: row.desk_id,
+  // Who is at the desk, and who answers for them. `external` is derived from
+  // the role rather than stored on the booking, so a visitor cannot be one
+  // thing here and another in the user list. The sponsor is stored, because it
+  // is a fact about a particular visit that must survive the account changing.
+  external: row.role_type === 'guest',
+  organization: row.organization ?? undefined,
+  sponsor: row.sponsor_first_name
+    ? `${row.sponsor_first_name} ${row.sponsor_last_name}`
+    : undefined,
 });
 
 // API request ({ date, startMin, endMin }) -> timestamps for the database

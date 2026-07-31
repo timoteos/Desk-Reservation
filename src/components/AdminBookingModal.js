@@ -27,6 +27,11 @@ const todayValue = () => {
 // free one, which is what an admin booking for themselves usually wants.
 export default function AdminBookingModal({ users, onClose, onBooked }) {
   const [userId, setUserId] = useState('');
+  // 'staff' books somebody already in the system; 'visitor' books an outsider
+  // the admin is vouching for, creating their record as part of the booking.
+  const [who, setWho] = useState('staff');
+  const [guest, setGuest] = useState({ firstName: '', lastName: '', email: '', organization: '' });
+  const [accepted, setAccepted] = useState(false);
   const [date, setDate] = useState(todayValue());
   // Opening on the whole office day meant that from 7:30 AM onwards the default
   // state could never be booked — a full map of apparently free desks, and a
@@ -91,7 +96,12 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
   const earliest = earliestStartOn(date);
   const dayOver = earliest > OFFICE_END - SLOT_MINUTES;
   const windowPassed = !closedDay && start < earliest;
-  const canSubmit = userId && date && !closedDay && !windowPassed && !submitting;
+  const guestReady =
+    guest.firstName.trim() && guest.lastName.trim() && guest.email.trim() && accepted;
+
+  const canSubmit =
+    (who === 'staff' ? Boolean(userId) : Boolean(guestReady)) &&
+    date && !closedDay && !windowPassed && !submitting;
   const selectedDesk = desks.find((d) => String(d.id) === String(deskId));
 
   const handleSubmit = async (e) => {
@@ -102,7 +112,16 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
     setError(null);
     try {
       const booking = await adminBook({
-        userId: Number(userId),
+        ...(who === 'staff'
+          ? { userId: Number(userId) }
+          : {
+              guest: {
+                firstName: guest.firstName.trim(),
+                lastName: guest.lastName.trim(),
+                email: guest.email.trim(),
+                organization: guest.organization.trim() || undefined,
+              },
+            }),
         date,
         startMin: start,
         endMin: end,
@@ -118,7 +137,12 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
     }
   };
 
-  const bookedFor = users.find((u) => u.id === userId)?.name;
+  const bookedFor = who === 'staff'
+    ? users.find((u) => u.id === userId)?.name
+    : `${guest.firstName} ${guest.lastName}`.trim();
+
+  const setGuestField = (field) => (e) =>
+    setGuest((g) => ({ ...g, [field]: e.target.value }));
 
   return (
     <div
@@ -165,21 +189,90 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <div>
-              <label htmlFor="book-user" className="text-ink-body font-medium text-sm mb-1.5 block">
-                Who is it for?
-              </label>
-              <select
-                id="book-user"
-                value={userId}
-                onChange={(e) => setUserId(e.target.value)}
-                className="w-full border border-surface-line rounded-lg px-3 py-2.5 text-ink-body text-sm bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
-              >
-                <option value="">Select a person…</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
+            <div className="flex flex-col gap-3">
+              <span className="text-ink-body font-medium text-sm">Who is it for?</span>
+
+              <div className="flex gap-2" role="group" aria-label="Who the booking is for">
+                {[
+                  { key: 'staff', label: 'A staff member' },
+                  { key: 'visitor', label: 'An external visitor' },
+                ].map((o) => (
+                  <button
+                    key={o.key}
+                    type="button"
+                    onClick={() => { setWho(o.key); setError(null); }}
+                    aria-pressed={who === o.key}
+                    className={`flex-1 text-sm font-medium px-3 py-2 rounded-lg border transition
+                      ${who === o.key
+                        ? 'bg-mqd-btn text-white border-mqd-btn'
+                        : 'border-surface-line text-ink-body hover:bg-surface-panel'}`}
+                  >
+                    {o.label}
+                  </button>
                 ))}
-              </select>
+              </div>
+
+              {who === 'staff' ? (
+                <select
+                  id="book-user"
+                  aria-label="Staff member"
+                  value={userId}
+                  onChange={(e) => setUserId(e.target.value)}
+                  className="w-full border border-surface-line rounded-lg px-3 py-2.5 text-ink-body text-sm bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                >
+                  <option value="">Select a person…</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input
+                      aria-label="Visitor first name" placeholder="First name"
+                      value={guest.firstName} onChange={setGuestField('firstName')}
+                      className="border border-surface-line rounded-lg px-3 py-2.5 text-ink-body text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                    />
+                    <input
+                      aria-label="Visitor last name" placeholder="Last name"
+                      value={guest.lastName} onChange={setGuestField('lastName')}
+                      className="border border-surface-line rounded-lg px-3 py-2.5 text-ink-body text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                    />
+                  </div>
+                  <input
+                    type="email" aria-label="Visitor email" placeholder="visitor@example.com"
+                    value={guest.email} onChange={setGuestField('email')}
+                    className="border border-surface-line rounded-lg px-3 py-2.5 text-ink-body text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                  />
+                  <p className="text-ink-muted text-xs -mt-1.5">
+                    They cannot sign in, so their confirmation code is the only way they
+                    can reach this booking. It goes to this address.
+                  </p>
+                  <input
+                    aria-label="Visitor organization" placeholder="Organization (optional)"
+                    value={guest.organization} onChange={setGuestField('organization')}
+                    className="border border-surface-line rounded-lg px-3 py-2.5 text-ink-body text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                  />
+
+                  {/* The record of responsibility is the sponsor stored on the
+                      booking, not this box — somebody signing visitors in weekly
+                      stops reading it by the fourth time. It is here to state the
+                      rule once, and to make clear whose name goes on it. */}
+                  <label className="flex gap-2.5 items-start bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 cursor-pointer">
+                    <input
+                      type="checkbox" checked={accepted}
+                      onChange={(e) => setAccepted(e.target.checked)}
+                      className="mt-0.5 shrink-0"
+                    />
+                    <span className="text-amber-900 text-xs leading-relaxed">
+                      <strong className="font-semibold">You are sponsoring this visitor.</strong>{' '}
+                      Your name is recorded against this booking, and you are accountable
+                      for their conduct and for anything that happens at this desk while
+                      they hold it.
+                    </span>
+                  </label>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

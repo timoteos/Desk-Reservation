@@ -25,12 +25,16 @@ const SELECT_RESERVATION = `
   SELECT r.reservation_id, r.user_id, r.desk_id, r.starts_at, r.ends_at,
          r.status, r.confirmation_code, r.booking_source, r.schedule_id,
          s.series_id,
-         u.first_name, u.last_name,
+         u.first_name, u.last_name, u.organization,
+         ur.role_type,
+         sp.first_name AS sponsor_first_name, sp.last_name AS sponsor_last_name,
          d.desk_number
     FROM reservations r
     JOIN users u ON u.user_id = r.user_id
+    JOIN roles ur ON ur.role_id = u.role_id
     JOIN desks d ON d.desk_id = r.desk_id
     LEFT JOIN recurring_schedules s ON s.schedule_id = r.schedule_id
+    LEFT JOIN users sp ON sp.user_id = r.sponsored_by_user_id
 `;
 
 // GET /api/reservations?date=YYYY-MM-DD

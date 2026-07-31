@@ -108,6 +108,15 @@ export default function LogsTab({ dataVersion = 0 }) {
                       {log.label}
                     </span>
                     <span className="text-sm font-semibold text-ink">{actorLabel(log)}</span>
+                    {/* Read from the entry's own metadata, written when it
+                        happened, rather than by joining to the account — which
+                        can be deactivated or have its role changed, and would
+                        then quietly rewrite what the history says. */}
+                    {log.metadata?.external && (
+                      <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded bg-amber-100 text-amber-800">
+                        External
+                      </span>
+                    )}
                   </div>
 
                   {log.subject && (
@@ -119,6 +128,10 @@ export default function LogsTab({ dataVersion = 0 }) {
                       {log.startMin != null && <> &middot; {formatMinutes(log.startMin)} - {formatMinutes(log.endMin)}</>}
                       {log.deskNumber != null && <> &middot; Desk# {log.deskNumber}</>}
                     </p>
+                  )}
+
+                  {log.metadata?.external && log.metadata.organization && (
+                    <p className="text-amber-800 text-xs mt-1">{log.metadata.organization}</p>
                   )}
 
                   {log.description && (
