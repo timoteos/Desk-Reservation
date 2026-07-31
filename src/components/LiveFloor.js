@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { WifiOff } from 'lucide-react';
 import DeskMap, { DeskMapLegend } from './DeskMap';
 import { getDeskStatus, claimDesk } from '../api/client';
-import { formatMinutes } from '../lib/officeHours';
+import { formatMinutes, SLOT_MINUTES } from '../lib/officeHours';
 
 // How often the floor refreshes. Desks change hands over minutes, not seconds,
 // and this is twelve rows behind an index — cheap enough to do often, and a
@@ -18,6 +18,11 @@ const REFRESH_MS = 20000;
 // visitor and contractor passing through.
 export default function LiveFloor({ onClaimed }) {
   const [desks, setDesks] = useState(null);
+  // The server's clock, not the browser's. A kiosk left running for months is
+  // exactly the machine whose clock drifts, and the two disagreeing would offer
+  // an end time the server then refuses.
+  const [nowMin, setNowMin] = useState(null);
+  const [endMin, setEndMin] = useState(null);
   const [lastOk, setLastOk] = useState(null);
   const [stale, setStale] = useState(false);
   const [selected, setSelected] = useState(null);
@@ -30,6 +35,7 @@ export default function LiveFloor({ onClaimed }) {
     try {
       const data = await getDeskStatus();
       setDesks(data.desks);
+      setNowMin(data.nowMin);
       setLastOk(new Date());
       setStale(false);
     } catch {
@@ -48,15 +54,31 @@ export default function LiveFloor({ onClaimed }) {
 
   const chosen = desks?.find((d) => String(d.id) === String(selected));
 
+  // Every half hour from the next boundary up to the point the desk stops being
+  // free — the next booking, or the end of the day. Only the end is chosen; the
+  // start is now, because the person is standing there.
+  const endOptions = [];
+  if (chosen && nowMin != null) {
+    const first = Math.ceil((nowMin + 1) / SLOT_MINUTES) * SLOT_MINUTES;
+    for (let m = first; m <= chosen.freeUntilMin; m += SLOT_MINUTES) endOptions.push(m);
+    // A desk free for less than one slot is still worth taking for what is left.
+    if (endOptions.length === 0) endOptions.push(chosen.freeUntilMin);
+  }
+  const effectiveEnd = endMin ?? endOptions[endOptions.length - 1];
+
   const claim = async (e) => {
     e.preventDefault();
     if (!chosen || !email.trim() || busy) return;
     setBusy(true);
     setError(null);
     try {
-      const booking = await claimDesk(chosen.number, { email: email.trim() });
+      const booking = await claimDesk(chosen.number, {
+        email: email.trim(),
+        endMin: effectiveEnd,
+      });
       setSelected(null);
       setEmail('');
+      setEndMin(null);
       await load();
       onClaimed?.(booking);
     } catch (err) {
@@ -95,6 +117,8 @@ export default function LiveFloor({ onClaimed }) {
         selectedDeskId={selected}
         onSelect={(desk) => {
           setSelected((current) => (String(current) === String(desk.id) ? null : desk.id));
+          // A new desk has its own ceiling, so a leftover choice could exceed it.
+          setEndMin(null);
           setError(null);
         }}
         compact
@@ -105,9 +129,25 @@ export default function LiveFloor({ onClaimed }) {
         <form onSubmit={claim} className="bg-mqd-50 border border-mqd-200 rounded-xl p-4 flex flex-col gap-3">
           <p className="text-ink-body text-sm">
             <span className="font-semibold text-mqd-title">Desk# {chosen.number}</span>{' '}
-            — yours from now until {formatMinutes(chosen.freeUntilMin)}
-            {chosen.freeUntilMin < 1020 && ', when it is booked'}.
+            — free until {formatMinutes(chosen.freeUntilMin)}
+            {endOptions.length > 1 && endOptions[endOptions.length - 1] < 1020 && ', when it is booked'}.
           </p>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-ink-body text-sm font-medium">Until when?</span>
+            <select
+              value={effectiveEnd ?? ''}
+              onChange={(e) => setEndMin(Number(e.target.value))}
+              className="border border-surface-line rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+            >
+              {endOptions.map((m) => (
+                <option key={m} value={m}>
+                  {formatMinutes(m)}
+                  {m === endOptions[endOptions.length - 1] && endOptions.length > 1 ? ' — as long as it is free' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
           <input
             type="email"
             value={email}
@@ -128,11 +168,11 @@ export default function LiveFloor({ onClaimed }) {
               disabled={!email.trim() || busy}
               className="flex-1 bg-mqd-btn hover:bg-mqd-btn-hover disabled:opacity-40 text-white font-semibold py-2.5 rounded-lg text-sm transition"
             >
-              {busy ? 'Taking it…' : `Take Desk# ${chosen.number}`}
+              {busy ? 'Taking it…' : `Take it until ${formatMinutes(effectiveEnd)}`}
             </button>
             <button
               type="button"
-              onClick={() => { setSelected(null); setError(null); }}
+              onClick={() => { setSelected(null); setEndMin(null); setError(null); }}
               className="border border-surface-line hover:bg-surface-panel text-ink-body font-semibold px-4 rounded-lg text-sm transition"
             >
               Cancel

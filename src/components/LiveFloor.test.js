@@ -5,7 +5,7 @@ import * as api from '../api/client';
 jest.mock('../api/client');
 
 const FLOOR = {
-  nowMin: 700,
+  nowMin: 700,   // 11:40
   desks: [
     { id: '1', number: 1, label: 'Desk# 1', status: 'in_use', untilMin: 1020 },
     { id: '2', number: 2, label: 'Desk# 2', status: 'reserved', untilMin: 840 },
@@ -47,7 +47,51 @@ test('choosing a desk says how long it is actually yours for', async () => {
 
   // Desk 4 runs to the end of the day, so there is nothing to warn about.
   fireEvent.click(screen.getByLabelText('Desk 4, free'));
-  expect(await screen.findByText(/until 5:00 PM\./)).toBeInTheDocument();
+  expect(await screen.findByText(/free until 5:00 PM\./)).toBeInTheDocument();
+});
+
+test('the end times offered stop where the desk stops being free', async () => {
+  render(<LiveFloor />);
+  await screen.findByText(/2 of 4 desks free/);
+
+  // now is 11:40; desk 3 is booked at 1pm.
+  fireEvent.click(screen.getByLabelText('Desk 3, free'));
+  const options = [...(await screen.findByRole('combobox')).options].map((o) => o.textContent);
+
+  expect(options[0]).toBe('12:00 PM');
+  expect(options.at(-1)).toMatch(/^1:00 PM/);
+  // Nothing past the booking that follows.
+  expect(options.some((o) => o.startsWith('1:30'))).toBe(false);
+});
+
+test('a shorter stay can be chosen, and is what gets sent', async () => {
+  render(<LiveFloor />);
+  await screen.findByText(/2 of 4 desks free/);
+
+  fireEvent.click(screen.getByLabelText('Desk 4, free'));
+  fireEvent.change(screen.getByRole('combobox'), { target: { value: '780' } });
+  fireEvent.change(screen.getByLabelText(/your email address/i), {
+    target: { value: 'mark.burgess@dhs.hawaii.gov' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: /take it until 1:00 PM/i }));
+
+  await waitFor(() => expect(api.claimDesk).toHaveBeenCalledWith(4, {
+    email: 'mark.burgess@dhs.hawaii.gov',
+    endMin: 780,
+  }));
+});
+
+test('switching desks drops a choice the new desk could not honour', async () => {
+  render(<LiveFloor />);
+  await screen.findByText(/2 of 4 desks free/);
+
+  // Desk 4 runs to 5pm, so 4:00 is offered there.
+  fireEvent.click(screen.getByLabelText('Desk 4, free'));
+  fireEvent.change(screen.getByRole('combobox'), { target: { value: '960' } });
+
+  // Desk 3 stops at 1pm. The old choice must not survive.
+  fireEvent.click(screen.getByLabelText('Desk 3, free'));
+  expect(screen.getByRole('button', { name: /take it until 1:00 PM/i })).toBeInTheDocument();
 });
 
 test('taking a desk sends the desk and the address, and reports back', async () => {
@@ -59,10 +103,11 @@ test('taking a desk sends the desk and the address, and reports back', async () 
   fireEvent.change(screen.getByLabelText(/your email address/i), {
     target: { value: 'mark.burgess@dhs.hawaii.gov' },
   });
-  fireEvent.click(screen.getByRole('button', { name: /take desk# 4/i }));
+  fireEvent.click(screen.getByRole('button', { name: /take it until/i }));
 
   await waitFor(() => expect(api.claimDesk).toHaveBeenCalledWith(4, {
     email: 'mark.burgess@dhs.hawaii.gov',
+    endMin: 1020,
   }));
   await waitFor(() => expect(onClaimed).toHaveBeenCalled());
 });
@@ -76,7 +121,7 @@ test('losing the desk to somebody else is explained, and the floor re-read', asy
   fireEvent.change(screen.getByLabelText(/your email address/i), {
     target: { value: 'mark.burgess@dhs.hawaii.gov' },
   });
-  fireEvent.click(screen.getByRole('button', { name: /take desk# 4/i }));
+  fireEvent.click(screen.getByRole('button', { name: /take it until/i }));
 
   expect(await screen.findByText(/Somebody just took that desk/)).toBeInTheDocument();
   // Re-read, so whoever took it is now visible rather than the screen insisting
