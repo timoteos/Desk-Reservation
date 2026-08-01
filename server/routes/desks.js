@@ -1,9 +1,13 @@
 const express = require('express');
 const { pool, query } = require('../db');
 const { toMinutes, generateConfirmationCode } = require('../lib/reservationShape');
-const { officeHoursError, workingDayError, OFFICE_END, minutesOf } = require('../lib/officeHours');
+const {
+  officeHoursError, workingDayError, OFFICE_START, OFFICE_END,
+  OFFICE_HOURS_LABEL, minutesOf,
+} = require('../lib/officeHours');
 const { releaseNoShows } = require('../lib/checkIn');
 const { recordActivity } = require('../lib/activityLog');
+const { guestDetailsError, resolveGuest } = require('../lib/guests');
 
 const router = express.Router();
 
@@ -100,7 +104,9 @@ router.get('/status', async (req, res, next) => {
   }
 });
 
-// POST /api/desks/:number/claim   { email, endMin? }
+// POST /api/desks/:number/claim
+//   staff:   { email, endMin? }
+//   visitor: { guest: { firstName, lastName, email, organization? }, hostEmail, endMin? }
 //
 // Somebody standing at a free desk, taking it. Separate from the ordinary
 // booking route so it can force **today, starting now** — a walk-up must not be
@@ -111,12 +117,30 @@ router.get('/status', async (req, res, next) => {
 // administrator to click while they stand at an empty desk would be theatre,
 // and asking them to check in to a desk they are already sitting at would be
 // worse.
+//
+// A visitor may sign themselves in here, which the admin path does not allow —
+// but only because this screen is staffed, and only against a host. Sponsorship
+// is not waived, it is asked for: `hostEmail` is the member of staff the
+// visitor has come to see, and they are recorded as answering for the visit.
+// That is the question a front desk asks anyway, and it puts the record on
+// somebody who actually knows who this person is.
 router.post('/:number/claim', async (req, res, next) => {
   const client = await pool.connect();
+  let inTransaction = false;
   try {
-    const { email, endMin } = req.body;
-    if (!email || typeof email !== 'string' || !email.trim()) {
+    const { email, guest, hostEmail, endMin } = req.body;
+
+    if (!guest && (!email || typeof email !== 'string' || !email.trim())) {
       return res.status(400).json({ message: 'An email address is required.' });
+    }
+    if (guest) {
+      const problem = guestDetailsError(guest);
+      if (problem) return res.status(400).json({ message: problem });
+      if (!hostEmail || typeof hostEmail !== 'string' || !hostEmail.trim()) {
+        return res.status(400).json({
+          message: 'A visitor needs the address of the person they are here to see.',
+        });
+      }
     }
 
     await releaseNoShows();
@@ -126,6 +150,17 @@ router.post('/:number/claim', async (req, res, next) => {
 
     const dayProblem = workingDayError(now);
     if (dayProblem) return res.status(400).json({ message: dayProblem });
+
+    // Checked on the start alone, before the end is worked out. A claim starts
+    // now and its end is derived, so outside office hours the derived end lands
+    // before the start and the generic check blamed the person for a time they
+    // never chose: "End time must be after start time" at half past eleven at
+    // night, when the true answer is that the office is shut.
+    if (startMin < OFFICE_START || startMin >= OFFICE_END) {
+      return res.status(400).json({
+        message: `The office is closed. Desks can be taken during office hours, ${OFFICE_HOURS_LABEL}.`,
+      });
+    }
 
     const { rows: deskRows } = await client.query(
       'SELECT desk_id FROM desks WHERE desk_number = $1 AND is_active',
@@ -154,19 +189,50 @@ router.post('/:number/claim', async (req, res, next) => {
     const hoursProblem = officeHoursError(startMin, finalEnd, { alignStart: false });
     if (hoursProblem) return res.status(400).json({ message: hoursProblem });
 
-    // An account has to exist. A visitor with no booking cannot serve themselves
-    // here — they need an administrator to sponsor them, which is deliberate.
-    const { rows: userRows } = await client.query(
-      `SELECT user_id, first_name, last_name FROM users
-        WHERE lower(email) = lower($1) AND is_active`,
-      [email.trim()]
-    );
-    if (userRows.length === 0) {
-      return res.status(404).json({
-        message: `No account for ${email.trim()}. Ask the front desk — a visitor needs an administrator to sign them in.`,
-      });
+    const staffByEmail = async (address) => {
+      const { rows } = await client.query(
+        `SELECT u.user_id, u.first_name, u.last_name, r.role_type
+           FROM users u JOIN roles r ON r.role_id = u.role_id
+          WHERE lower(u.email) = lower($1) AND u.is_active`,
+        [address.trim()]
+      );
+      return rows[0] ?? null;
+    };
+
+    await client.query('BEGIN');
+    inTransaction = true;
+
+    let user;
+    let sponsorId = null;
+
+    if (guest) {
+      const host = await staffByEmail(hostEmail);
+      if (!host || host.role_type === 'guest') {
+        await client.query('ROLLBACK');
+        inTransaction = false;
+        return res.status(404).json({
+          message: `No MQD account for ${hostEmail.trim()}. A visitor has to name the person they are here to see.`,
+        });
+      }
+
+      const resolved = await resolveGuest(client, guest, host.user_id);
+      if (!resolved.ok) {
+        await client.query('ROLLBACK');
+        inTransaction = false;
+        return res.status(resolved.status).json({ message: resolved.message });
+      }
+      user = resolved.user;
+      sponsorId = host.user_id;
+    } else {
+      user = await staffByEmail(email);
+      if (!user) {
+        await client.query('ROLLBACK');
+        inTransaction = false;
+        return res.status(404).json({
+          message: `No account for ${email.trim()}. If you are visiting, sign in as a visitor instead.`,
+        });
+      }
     }
-    const user = userRows[0];
 
     const at = (mins) => new Date(
       now.getFullYear(), now.getMonth(), now.getDate(),
@@ -176,20 +242,30 @@ router.post('/:number/claim', async (req, res, next) => {
     const { rows } = await client.query(
       `INSERT INTO reservations
          (user_id, desk_id, starts_at, ends_at, confirmation_code,
-          status, booking_source, checked_in_at)
-       VALUES ($1, $2, $3, $4, $5, 'approved', 'walk_up', now())
+          status, booking_source, checked_in_at, sponsored_by_user_id)
+       VALUES ($1, $2, $3, $4, $5, 'approved', 'walk_up', now(), $6)
        RETURNING reservation_id, confirmation_code`,
-      [user.user_id, deskId, at(startMin), at(finalEnd), generateConfirmationCode()]
+      [user.user_id, deskId, at(startMin), at(finalEnd), generateConfirmationCode(), sponsorId]
     );
 
     await recordActivity({
       activityType: 'booked_by_admin',
       reservationId: rows[0].reservation_id,
-      description: `Desk# ${req.params.number} claimed in person and checked in`,
-      metadata: { walkUp: true },
+      actorUserId: sponsorId,
+      description: guest
+        ? `Desk# ${req.params.number} taken by an external visitor at the front desk`
+        : `Desk# ${req.params.number} claimed in person and checked in`,
+      metadata: guest
+        ? { walkUp: true, external: true, guestUserId: user.user_id,
+            sponsoredByUserId: sponsorId, organization: user.organization ?? null }
+        : { walkUp: true },
     }, client);
 
+    await client.query('COMMIT');
+    inTransaction = false;
+
     res.status(201).json({
+      external: Boolean(guest),
       confirmationCode: rows[0].confirmation_code,
       name: `${user.first_name} ${user.last_name}`,
       deskNumber: Number(req.params.number),
@@ -197,6 +273,7 @@ router.post('/:number/claim', async (req, res, next) => {
       endMin: finalEnd,
     });
   } catch (err) {
+    if (inTransaction) await client.query('ROLLBACK').catch(() => {});
     if (err.constraint === 'no_double_booking') {
       return res.status(409).json({ message: 'Somebody just took that desk. Pick another.' });
     }

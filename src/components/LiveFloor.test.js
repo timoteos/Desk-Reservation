@@ -171,3 +171,68 @@ test('a full floor says so rather than inviting a tap that cannot work', async (
 
   expect(await screen.findByText(/Every desk is taken at the moment/)).toBeInTheDocument();
 });
+
+const chooseVisitor = async () => {
+  render(<LiveFloor />);
+  await screen.findByText(/2 of 4 desks free/);
+  fireEvent.click(screen.getByLabelText('Desk 4, free'));
+  fireEvent.click(screen.getByRole('button', { name: /a visitor/i }));
+};
+
+test('a visitor gives their own details and names who they are seeing', async () => {
+  await chooseVisitor();
+
+  fireEvent.change(screen.getByLabelText(/visitor first name/i), { target: { value: 'Ana' } });
+  fireEvent.change(screen.getByLabelText(/visitor last name/i), { target: { value: 'Cruz' } });
+  fireEvent.change(screen.getByLabelText(/visitor email/i), { target: { value: 'ana@acme.test' } });
+  fireEvent.change(screen.getByLabelText(/visitor company/i), { target: { value: 'Acme' } });
+  fireEvent.change(screen.getByLabelText(/here to see/i), { target: { value: 'rhona.ramos@dhs.hawaii.gov' } });
+  fireEvent.click(screen.getByRole('button', { name: /take it until/i }));
+
+  await waitFor(() => expect(api.claimDesk).toHaveBeenCalledWith(4, {
+    guest: { firstName: 'Ana', lastName: 'Cruz', email: 'ana@acme.test', organization: 'Acme' },
+    hostEmail: 'rhona.ramos@dhs.hawaii.gov',
+    endMin: 1020,
+  }));
+});
+
+test('a visitor cannot take a desk without naming a host', async () => {
+  // Sponsorship is not waived at the front desk, it is asked for. Without a
+  // host nobody answers for a stranger holding a desk in the building.
+  await chooseVisitor();
+
+  fireEvent.change(screen.getByLabelText(/visitor first name/i), { target: { value: 'Ana' } });
+  fireEvent.change(screen.getByLabelText(/visitor last name/i), { target: { value: 'Cruz' } });
+  fireEvent.change(screen.getByLabelText(/visitor email/i), { target: { value: 'ana@acme.test' } });
+
+  expect(screen.getByRole('button', { name: /take it until/i })).toBeDisabled();
+
+  fireEvent.change(screen.getByLabelText(/here to see/i), { target: { value: 'rhona.ramos@dhs.hawaii.gov' } });
+  expect(screen.getByRole('button', { name: /take it until/i })).toBeEnabled();
+});
+
+test('the form says what naming a host actually means', async () => {
+  await chooseVisitor();
+  expect(screen.getByText(/recorded as sponsoring this visit/i)).toBeInTheDocument();
+});
+
+test('staff still take a desk with an address alone', async () => {
+  render(<LiveFloor />);
+  await screen.findByText(/2 of 4 desks free/);
+  fireEvent.click(screen.getByLabelText('Desk 4, free'));
+
+  // No visitor fields until asked for.
+  expect(screen.queryByLabelText(/visitor first name/i)).not.toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText(/your email address/i), {
+    target: { value: 'mark.burgess@dhs.hawaii.gov' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: /take it until/i }));
+
+  await waitFor(() => expect(api.claimDesk).toHaveBeenCalled());
+
+  const sent = api.claimDesk.mock.calls[0][1];
+  expect(sent).not.toHaveProperty('guest');
+  expect(sent).not.toHaveProperty('hostEmail');
+  expect(sent.email).toBe('mark.burgess@dhs.hawaii.gov');
+});

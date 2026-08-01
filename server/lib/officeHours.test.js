@@ -35,15 +35,19 @@ test('a UTC host still runs on the office clock', () => {
   expect(offset).toBe(600); // UTC-10, and Hawaii has no daylight saving
 });
 
-test('a UTC host accepts a slot later today', () => {
-  const { error } = inNodeUnderUTC(`
-    const { tooSoonError } = require('./officeHours');
-    const n = new Date();
-    const fourThirty = new Date(n.getFullYear(), n.getMonth(), n.getDate(), 16, 30);
-    return { error: tooSoonError(fourThirty) };
+test('a UTC host builds a wall-clock time as Honolulu meant it', () => {
+  // Asserted as an instant rather than as "is this bookable", which was the
+  // first version and depended on the wall clock of whoever ran it: it passed
+  // all day and failed every evening after half past four. A test that only
+  // holds during office hours is not testing the thing it claims to.
+  const { iso } = inNodeUnderUTC(`
+    require('./officeHours');
+    const d = new Date(2026, 6, 30, 16, 30);   // 30 July, half past four
+    return { iso: d.toISOString() };
   `);
-  // Null only if the host is reading 4:30pm as Honolulu's, not its own.
-  expect(error).toBeNull();
+
+  // Half past four in Honolulu is half past two the next morning, UTC.
+  expect(iso).toBe('2026-07-31T02:30:00.000Z');
 });
 
 test('a slot that has been and gone is refused as past', () => {

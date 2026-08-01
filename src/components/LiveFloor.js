@@ -27,6 +27,13 @@ export default function LiveFloor({ onClaimed }) {
   const [stale, setStale] = useState(false);
   const [selected, setSelected] = useState(null);
   const [email, setEmail] = useState('');
+  // Staff take a desk with their address alone. A visitor has no account, so
+  // they give their details and name the person they are here to see — who is
+  // recorded as sponsoring the visit. Sponsorship is not waived at the front
+  // desk, it is asked for.
+  const [who, setWho] = useState('staff');
+  const [guest, setGuest] = useState({ firstName: '', lastName: '', email: '', organization: '' });
+  const [hostEmail, setHostEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const timer = useRef(null);
@@ -66,19 +73,39 @@ export default function LiveFloor({ onClaimed }) {
   }
   const effectiveEnd = endMin ?? endOptions[endOptions.length - 1];
 
+  const guestReady =
+    guest.firstName.trim() && guest.lastName.trim() && guest.email.trim() && hostEmail.trim();
+  const ready = who === 'staff' ? Boolean(email.trim()) : Boolean(guestReady);
+
+  const resetForm = () => {
+    setSelected(null);
+    setEmail('');
+    setGuest({ firstName: '', lastName: '', email: '', organization: '' });
+    setHostEmail('');
+    setEndMin(null);
+  };
+
   const claim = async (e) => {
     e.preventDefault();
-    if (!chosen || !email.trim() || busy) return;
+    if (!chosen || !ready || busy) return;
     setBusy(true);
     setError(null);
     try {
       const booking = await claimDesk(chosen.number, {
-        email: email.trim(),
+        ...(who === 'staff'
+          ? { email: email.trim() }
+          : {
+              guest: {
+                firstName: guest.firstName.trim(),
+                lastName: guest.lastName.trim(),
+                email: guest.email.trim(),
+                organization: guest.organization.trim() || undefined,
+              },
+              hostEmail: hostEmail.trim(),
+            }),
         endMin: effectiveEnd,
       });
-      setSelected(null);
-      setEmail('');
-      setEndMin(null);
+      resetForm();
       await load();
       onClaimed?.(booking);
     } catch (err) {
@@ -148,15 +175,77 @@ export default function LiveFloor({ onClaimed }) {
               ))}
             </select>
           </label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => { setEmail(e.target.value); setError(null); }}
-            placeholder="you@dhs.hawaii.gov"
-            aria-label="Your email address"
-            autoComplete="off"
-            className="border border-surface-line rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
-          />
+          <div className="flex gap-2" role="group" aria-label="Who is taking this desk">
+            {[
+              { key: 'staff', label: 'MQD staff' },
+              { key: 'visitor', label: 'A visitor' },
+            ].map((o) => (
+              <button
+                key={o.key}
+                type="button"
+                onClick={() => { setWho(o.key); setError(null); }}
+                aria-pressed={who === o.key}
+                className={`flex-1 text-sm font-medium px-3 py-2 rounded-lg border transition
+                  ${who === o.key
+                    ? 'bg-mqd-btn text-white border-mqd-btn'
+                    : 'border-surface-line bg-white text-ink-body hover:bg-surface-panel'}`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+
+          {who === 'staff' ? (
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => { setEmail(e.target.value); setError(null); }}
+              placeholder="you@dhs.hawaii.gov"
+              aria-label="Your email address"
+              autoComplete="off"
+              className="border border-surface-line rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+            />
+          ) : (
+            <div className="flex flex-col gap-2">
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  aria-label="Visitor first name" placeholder="First name"
+                  value={guest.firstName}
+                  onChange={(e) => { setGuest((g) => ({ ...g, firstName: e.target.value })); setError(null); }}
+                  className="border border-surface-line rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                />
+                <input
+                  aria-label="Visitor last name" placeholder="Last name"
+                  value={guest.lastName}
+                  onChange={(e) => { setGuest((g) => ({ ...g, lastName: e.target.value })); setError(null); }}
+                  className="border border-surface-line rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                />
+              </div>
+              <input
+                type="email" aria-label="Visitor email" placeholder="visitor@example.com"
+                value={guest.email}
+                onChange={(e) => { setGuest((g) => ({ ...g, email: e.target.value })); setError(null); }}
+                className="border border-surface-line rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+              />
+              <input
+                aria-label="Visitor company" placeholder="Company (optional)"
+                value={guest.organization}
+                onChange={(e) => setGuest((g) => ({ ...g, organization: e.target.value }))}
+                className="border border-surface-line rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+              />
+              <input
+                type="email" aria-label="Who they are here to see"
+                placeholder="Who are you here to see? their@dhs.hawaii.gov"
+                value={hostEmail}
+                onChange={(e) => { setHostEmail(e.target.value); setError(null); }}
+                className="border border-surface-line rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+              />
+              <p className="text-ink-muted text-xs">
+                They are recorded as sponsoring this visit, and answer for the desk
+                while it is held.
+              </p>
+            </div>
+          )}
           {error && (
             <p className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2 text-sm">
               {error}
@@ -165,14 +254,14 @@ export default function LiveFloor({ onClaimed }) {
           <div className="flex gap-2">
             <button
               type="submit"
-              disabled={!email.trim() || busy}
+              disabled={!ready || busy}
               className="flex-1 bg-mqd-btn hover:bg-mqd-btn-hover disabled:opacity-40 text-white font-semibold py-2.5 rounded-lg text-sm transition"
             >
               {busy ? 'Taking it…' : `Take it until ${formatMinutes(effectiveEnd)}`}
             </button>
             <button
               type="button"
-              onClick={() => { setSelected(null); setEndMin(null); setError(null); }}
+              onClick={() => { resetForm(); setError(null); }}
               className="border border-surface-line hover:bg-surface-panel text-ink-body font-semibold px-4 rounded-lg text-sm transition"
             >
               Cancel
