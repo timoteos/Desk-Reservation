@@ -139,9 +139,9 @@ export default function LiveFloor({ onClaimed }) {
   const freeCount = desks?.filter((d) => d.status === 'free').length ?? 0;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 w-full">
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
-        <h2 className="text-mqd-title font-semibold">
+        <h2 className="text-mqd-title font-semibold text-lg">
           {desks
             ? `${freeCount} of ${desks.length} desks free right now`
             : 'Loading the floor…'}
@@ -240,18 +240,23 @@ export default function LiveFloor({ onClaimed }) {
                   className="border border-surface-line rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
                 />
               </div>
-              <input
-                type="email" aria-label="Visitor email" placeholder="visitor@example.com"
-                value={guest.email}
-                onChange={(e) => { setGuest((g) => ({ ...g, email: e.target.value })); setError(null); }}
-                className="border border-surface-line rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
-              />
-              <input
-                aria-label="Visitor company" placeholder="Company (optional)"
-                value={guest.organization}
-                onChange={(e) => setGuest((g) => ({ ...g, organization: e.target.value }))}
-                className="border border-surface-line rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
-              />
+              {/* Paired, so the visitor form costs four rows rather than five.
+                  On a screen somebody is standing at, a field below the fold is
+                  a field that gets missed. */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input
+                  type="email" aria-label="Visitor email" placeholder="visitor@example.com"
+                  value={guest.email}
+                  onChange={(e) => { setGuest((g) => ({ ...g, email: e.target.value })); setError(null); }}
+                  className="border border-surface-line rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                />
+                <input
+                  aria-label="Visitor company" placeholder="Company (optional)"
+                  value={guest.organization}
+                  onChange={(e) => setGuest((g) => ({ ...g, organization: e.target.value }))}
+                  className="border border-surface-line rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
+                />
+              </div>
               <input
                 type="email" aria-label="Who they are here to see"
                 placeholder="Who are you here to see? their@dhs.hawaii.gov"
@@ -259,7 +264,7 @@ export default function LiveFloor({ onClaimed }) {
                 onChange={(e) => { setHostEmail(e.target.value); setError(null); }}
                 className="border border-surface-line rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mqd-btn"
               />
-              <p className="text-ink-muted text-xs">
+              <p className="text-ink-muted text-xs -mt-0.5">
                 They are recorded as sponsoring this visit, and answer for the desk
                 while it is held.
               </p>
@@ -294,10 +299,14 @@ export default function LiveFloor({ onClaimed }) {
           </div>
         </form>
       ) : (
-        <p className="text-ink-muted text-sm">
+        <p className={`text-sm rounded-lg px-3 py-2.5 ${
+          freeCount > 0
+            ? 'bg-mqd-50 border border-mqd-200 text-ink-body'
+            : 'bg-amber-50 border border-amber-200 text-amber-900'
+        }`}>
           {freeCount > 0
-            ? 'No booking? Tap a green desk to take it for today.'
-            : 'Every desk is taken at the moment. Ask the front desk.'}
+            ? 'No booking? Tap any green desk to take it for today.'
+            : 'Every desk is taken at the moment. Ask the person at the front desk.'}
         </p>
       )}
     </div>

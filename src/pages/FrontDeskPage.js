@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { CheckCircle2, XCircle, DoorOpen } from 'lucide-react';
+import Clock from '../components/Clock';
 import { checkIn } from '../api/client';
 import { formatMinutes } from '../lib/officeHours';
 import LiveFloor from '../components/LiveFloor';
@@ -70,13 +71,39 @@ export default function FrontDeskPage() {
   };
 
   return (
-    <div className="flex-1 flex items-start justify-center px-4 py-10 bg-surface-page">
-      <div className="w-full max-w-5xl">
+    <div className="flex-1 flex flex-col bg-surface-page px-4 md:px-6 py-5">
+      {/* `m-auto` rather than `justify-center` on the parent. Both centre while
+          the content fits, but justify-center clips at *both* ends once it does
+          not — and the visitor form, which is four fields taller, does not.
+          Auto margins collapse instead, so the overflow stays reachable. */}
+      <div className="w-full max-w-[92rem] mx-auto m-auto flex flex-col gap-4">
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+      <div className="flex items-baseline justify-between gap-4 flex-wrap">
+        <h1 className="text-2xl md:text-3xl font-bold text-mqd-title">
+          Welcome — check in or take a desk
+        </h1>
+        <Clock />
+      </div>
+
+      {/* The floor plan is what somebody reads from a few paces away, so it
+          takes the room. Check-in is a panel beside it rather than an equal
+          half: it is a short interaction with a keyboard, not something to
+          look at. */}
+      {/* Centred rather than stretched. The floor plan is an image with a fixed
+          aspect ratio, so it is bound by the width of its column and cannot grow
+          into extra height — stretching the card only opened a white void
+          beneath it. Even space above and below reads as a choice; a void
+          inside a card reads as a bug. */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2.6fr)_minmax(20rem,1fr)] gap-5 items-start">
+
+        <div className="order-2 lg:order-1 bg-white rounded-2xl shadow-modal p-5 md:p-6 flex">
+          <LiveFloor onClaimed={setResult} />
+        </div>
+
+        <div className="order-1 lg:order-2 flex flex-col">
         {result ? (
-          <div className="bg-white rounded-2xl shadow-modal p-8 flex flex-col items-center gap-4 text-center">
-            <CheckCircle2 className="w-16 h-16 text-mqd-btn" />
+          <div className="bg-white rounded-2xl shadow-modal p-6 flex flex-col items-center gap-3 text-center">
+            <CheckCircle2 className="w-14 h-14 text-mqd-btn" />
             <p className="text-ink-muted text-sm">Checked in</p>
             <p className="text-3xl font-bold text-mqd-title">{result.name}</p>
 
@@ -121,27 +148,29 @@ export default function FrontDeskPage() {
             </button>
           </div>
         ) : (
-          <form onSubmit={submit} className="bg-white rounded-2xl shadow-modal p-8 flex flex-col gap-5">
-            <div className="flex flex-col items-center gap-2 text-center">
-              <DoorOpen className="w-10 h-10 text-mqd-title" />
-              <h1 className="text-2xl font-bold text-mqd-title">Check in</h1>
-              <p className="text-ink-muted text-sm">
-                Enter the confirmation code from your booking.
-              </p>
+          <form onSubmit={submit} className="bg-white rounded-2xl shadow-modal p-6 flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <DoorOpen className="w-8 h-8 text-mqd-title shrink-0" />
+              <div className="min-w-0">
+                <h2 className="text-xl font-bold text-mqd-title leading-tight">Already booked?</h2>
+                <p className="text-ink-muted text-sm">Enter your confirmation code.</p>
+              </div>
             </div>
 
             <input
               ref={inputRef}
               value={code}
               onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(null); }}
-              placeholder="e.g. KS5CTVXU"
+              placeholder="8 characters"
               aria-label="Confirmation code"
               autoComplete="off"
               autoCapitalize="characters"
               spellCheck="false"
               maxLength={12}
-              className="w-full text-center font-mono text-3xl tracking-[0.3em] uppercase
-                         border-2 border-surface-line rounded-xl px-4 py-5
+              className="w-full text-center font-mono text-2xl md:text-3xl tracking-[0.25em] uppercase
+                         border-2 border-surface-line rounded-xl px-3 py-4
+                         placeholder:font-sans placeholder:text-base placeholder:tracking-normal
+                         placeholder:normal-case placeholder:text-ink-muted
                          focus:outline-none focus:border-mqd-btn focus:ring-2 focus:ring-mqd-btn/30"
             />
 
@@ -167,11 +196,6 @@ export default function FrontDeskPage() {
           </form>
         )}
 
-        {/* The floor, live. Somebody arriving without a booking has somewhere to
-            go, and somebody who does have one can see they are heading to a desk
-            that is actually theirs. */}
-        <div className="bg-white rounded-2xl shadow-modal p-6">
-          <LiveFloor onClaimed={setResult} />
         </div>
       </div>
       </div>

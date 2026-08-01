@@ -52,8 +52,15 @@ export default function Header() {
           <img src={`${process.env.PUBLIC_URL}/logos/soh.png`} alt="State of Hawaii Seal" className="w-10 h-10 md:w-14 md:h-14 object-contain" onError={(e) => { e.target.style.display='none'; }} />
           <img src={`${process.env.PUBLIC_URL}/logos/mqd.png`} alt="MQD Logo" className="w-10 h-10 md:w-14 md:h-14 object-contain" onError={(e) => { e.target.style.display='none'; }} />
         </div>
-        <h1 className={`text-lg md:text-3xl font-extrabold text-mqd-title leading-tight ${inAdminArea ? '' : 'group-hover:text-mqd-btn-hover transition-colors'}`}>
-          {inAdminArea ? 'Admin Dashboard' : 'MQD Desk Reservation Systems Office'}
+        {/* "Front Desk" rather than "Front Office": one names the desk you are
+            standing at, the other is a way of describing the administrative side
+            of a division, and a visitor reading a sign wants the first. */}
+        <h1 className={`text-lg md:text-3xl font-extrabold text-mqd-title leading-tight ${inAdminArea || onSharedScreen ? '' : 'group-hover:text-mqd-btn-hover transition-colors'}`}>
+          {inAdminArea
+            ? 'Admin Dashboard'
+            : onSharedScreen
+              ? 'MQD Front Desk'
+              : 'MQD Desk Reservation Systems Office'}
         </h1>
       </TitleWrapper>
       {onSharedScreen ? null : admin ? (

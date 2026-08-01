@@ -60,9 +60,17 @@ test('the lobby screen offers no way into the admin area', () => {
   expect(screen.queryByRole('link', { name: /admin login/i })).not.toBeInTheDocument();
 });
 
-test('the lobby screen still says whose building this is', () => {
+test('the lobby screen names itself as the front desk, not the whole system', () => {
+  // Somebody standing at reception wants to know they are at the right desk,
+  // not the name of the software.
   renderAt('/front-desk', null);
-  expect(screen.getByText(/MQD Desk Reservation Systems Office/)).toBeInTheDocument();
-  // ...but the title is not a link, so it cannot be used to browse away.
+  expect(screen.getByText('MQD Front Desk')).toBeInTheDocument();
+  expect(screen.queryByText(/Desk Reservation Systems Office/)).not.toBeInTheDocument();
+  // ...and the title is not a link, so it cannot be used to browse away.
   expect(screen.queryByRole('link', { name: /home/i })).not.toBeInTheDocument();
+});
+
+test('every other page keeps the full name', () => {
+  renderAt('/', null);
+  expect(screen.getByText(/MQD Desk Reservation Systems Office/)).toBeInTheDocument();
 });
