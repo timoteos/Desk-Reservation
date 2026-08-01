@@ -288,3 +288,28 @@ test('staff still take a desk with an address alone', async () => {
   expect(sent).not.toHaveProperty('hostEmail');
   expect(sent.email).toBe('mark.burgess@dhs.hawaii.gov');
 });
+
+test('a chosen end that the clock has passed falls to the nearest still on offer', async () => {
+  // The options come from the server's clock and shift on every half hour. The
+  // visitor form takes long enough to fill in that a choice can go stale while
+  // somebody is typing; left alone the form submitted a value the server refused.
+  jest.useFakeTimers();
+  try {
+    render(<LiveFloor />);
+    await act(async () => { await Promise.resolve(); });
+
+    fireEvent.click(screen.getByLabelText('Desk 4, free'));
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '720' } });   // 12:00
+    expect(screen.getByRole('button', { name: /take it until 12:00 PM/i })).toBeInTheDocument();
+
+    // The next poll lands after noon, so 12:00 can no longer be booked until.
+    // Five seconds, because a desk is selected and the floor tightens its refresh.
+    api.getDeskStatus.mockResolvedValue({ ...FLOOR, nowMin: 721 });
+    await act(async () => { jest.advanceTimersByTime(5000); await Promise.resolve(); });
+
+    expect(screen.getByRole('button', { name: /take it until 12:30 PM/i })).toBeInTheDocument();
+  } finally {
+    jest.useRealTimers();
+  }
+});

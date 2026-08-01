@@ -51,6 +51,26 @@ async function releaseNoShows(client = { query }) {
   return rows.length;
 }
 
+// Which statuses may be checked in, stated as an allow-list.
+//
+// It was a deny-list — refuse canceled, denied and pending, let anything else
+// through — and `expired` fell straight past it into an update that sets the
+// row to 'approved'. A request nobody ever reviewed could be walked up to the
+// front desk and turned into a desk, which is the whole thing the approval
+// queue exists to prevent. A deny-list silently admits every status added
+// afterwards, and 'no_show' had just been added.
+//
+// 'approved' is the ordinary case. 'no_show' is the reclaim: the desk was
+// released because nobody arrived, and they have now arrived.
+const CHECK_IN_ALLOWED = ['approved', 'no_show'];
+
+const REFUSALS = {
+  pending: 'That booking has not been approved yet. Ask an administrator.',
+  expired: 'That request was never reviewed and has expired. Ask the front desk.',
+  denied: 'That request was not approved.',
+  canceled: 'That booking was cancelled.',
+};
+
 // Why a particular booking cannot be checked in, or null when it can.
 //
 // Separate from the update so the front desk can explain a refusal in the same
@@ -62,13 +82,10 @@ function checkInProblem(row, now = new Date()) {
 
   if (row.checked_in_at) return { code: 'already', message: 'Already checked in.' };
 
-  if (['canceled', 'denied'].includes(row.status)) {
-    return { code: 'gone', message: 'That booking was cancelled.' };
-  }
-  if (row.status === 'pending') {
+  if (!CHECK_IN_ALLOWED.includes(row.status)) {
     return {
-      code: 'pending',
-      message: 'That booking has not been approved yet. Ask an administrator.',
+      code: row.status,
+      message: REFUSALS[row.status] || 'That booking cannot be checked in.',
     };
   }
   if (now > endsAt) {

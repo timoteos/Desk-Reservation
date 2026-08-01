@@ -88,7 +88,18 @@ export default function LiveFloor({ onClaimed }) {
     // A desk free for less than one slot is still worth taking for what is left.
     if (endOptions.length === 0) endOptions.push(chosen.freeUntilMin);
   }
-  const effectiveEnd = endMin ?? endOptions[endOptions.length - 1];
+  // Clamped to what is still on offer. The options are derived from the
+  // server's clock and shift every time it crosses a half hour, so a choice
+  // made at 11:40 is no longer offered at 12:01 — and the visitor form takes
+  // long enough to fill in that this is a normal occurrence, not an edge case.
+  // Left alone, the select showed nothing matching and the form submitted a
+  // dead value the server refused. The nearest end still available is taken
+  // instead, and the button label says which.
+  const effectiveEnd =
+    endMin != null && endOptions.includes(endMin)
+      ? endMin
+      : endOptions.find((m) => endMin != null && m >= endMin)
+        ?? endOptions[endOptions.length - 1];
 
   const guestReady =
     guest.firstName.trim() && guest.lastName.trim() && guest.email.trim() && hostEmail.trim();
