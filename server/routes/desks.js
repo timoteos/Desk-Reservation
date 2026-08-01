@@ -53,7 +53,13 @@ router.get('/status', async (req, res, next) => {
          FROM desks d
     LEFT JOIN reservations r
            ON r.desk_id = d.desk_id
-          AND r.status = 'approved'
+          -- pending as well as approved, because the exclusion constraint
+          -- covers both. A booking awaiting approval still holds the desk, so
+          -- showing it free meant offering something the database would refuse
+          -- — a green desk that answers "somebody just took that" when nobody
+          -- had. The ceiling query below already counted both; these two
+          -- disagreed.
+          AND r.status IN ('pending', 'approved')
           AND r.starts_at::date = current_date
         WHERE d.is_active
         ORDER BY d.desk_number, r.starts_at`

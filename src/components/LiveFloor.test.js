@@ -121,12 +121,64 @@ test('losing the desk to somebody else is explained, and the floor re-read', asy
   fireEvent.change(screen.getByLabelText(/your email address/i), {
     target: { value: 'mark.burgess@dhs.hawaii.gov' },
   });
+  const before = api.getDeskStatus.mock.calls.length;
   fireEvent.click(screen.getByRole('button', { name: /take it until/i }));
 
   expect(await screen.findByText(/Somebody just took that desk/)).toBeInTheDocument();
   // Re-read, so whoever took it is now visible rather than the screen insisting
-  // the desk is still free.
-  await waitFor(() => expect(api.getDeskStatus).toHaveBeenCalledTimes(2));
+  // the desk is still free. Counted as an increase rather than a total, because
+  // selecting a desk also refreshes and the exact number is not the point.
+  await waitFor(() => expect(api.getDeskStatus.mock.calls.length).toBeGreaterThan(before));
+});
+
+test('a desk taken while the form is open says so and blocks the submit', async () => {
+  jest.useFakeTimers();
+  try {
+    render(<LiveFloor />);
+    await act(async () => { await Promise.resolve(); });
+
+    fireEvent.click(screen.getByLabelText('Desk 4, free'));
+    fireEvent.change(screen.getByLabelText(/your email address/i), {
+      target: { value: 'mark.burgess@dhs.hawaii.gov' },
+    });
+    expect(screen.getByRole('button', { name: /take it until/i })).toBeEnabled();
+
+    // Somebody else takes it between refreshes.
+    api.getDeskStatus.mockResolvedValue({
+      ...FLOOR,
+      desks: FLOOR.desks.map((d) =>
+        d.number === 4 ? { id: '4', number: 4, label: 'Desk# 4', status: 'in_use', untilMin: 1020 } : d),
+    });
+    await act(async () => { jest.advanceTimersByTime(5000); await Promise.resolve(); });
+
+    expect(screen.getByText(/took Desk# 4 while you were filling this in/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /take it until/i })).toBeDisabled();
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('it refreshes faster while a desk is being chosen', async () => {
+  jest.useFakeTimers();
+  try {
+    render(<LiveFloor />);
+    await act(async () => { await Promise.resolve(); });
+
+    // Idle: nothing at five seconds.
+    const idle = api.getDeskStatus.mock.calls.length;
+    await act(async () => { jest.advanceTimersByTime(5000); await Promise.resolve(); });
+    expect(api.getDeskStatus.mock.calls.length).toBe(idle);
+
+    fireEvent.click(screen.getByLabelText('Desk 4, free'));
+    await act(async () => { await Promise.resolve(); });
+    const choosing = api.getDeskStatus.mock.calls.length;
+
+    // Choosing: the window where staleness is actually felt.
+    await act(async () => { jest.advanceTimersByTime(5000); await Promise.resolve(); });
+    expect(api.getDeskStatus.mock.calls.length).toBeGreaterThan(choosing);
+  } finally {
+    jest.useRealTimers();
+  }
 });
 
 test('when the network drops it says so instead of insisting desks are free', async () => {

@@ -4,12 +4,24 @@ import DeskMap, { DeskMapLegend } from './DeskMap';
 import { getDeskStatus, claimDesk } from '../api/client';
 import { formatMinutes, SLOT_MINUTES } from '../lib/officeHours';
 
-// How often the floor refreshes. Desks change hands over minutes, not seconds,
-// and this is twelve rows behind an index — cheap enough to do often, and a
-// poll rather than a socket for the same reason the request queue polls: one
+// How often the floor refreshes.
+//
+// Polling rather than a socket, for the reason the request queue polls: one
 // query and ten milliseconds, against a persistent connection for whoever
 // inherits this to operate.
+//
+// Refreshing faster would not prevent a double booking, and it is worth being
+// clear why. Nothing here decides whether a desk is free — the exclusion
+// constraint does, at the moment of writing. A stale map costs a wasted tap and
+// a clear refusal, never a desk given to two people. Even at one-second polling
+// the gap between the last refresh and the tap would remain; only the database
+// closes it, and it already does.
+//
+// So the interval is tuned for usefulness, not safety. Idle, twenty seconds is
+// plenty for a screen somebody glances at. While a desk is selected and details
+// are being typed is the one window where staleness is felt, so it tightens.
 const REFRESH_MS = 20000;
+const REFRESH_WHILE_CHOOSING_MS = 5000;
 
 // The office floor as it stands, and a way to take a desk you are standing at.
 //
@@ -55,11 +67,16 @@ export default function LiveFloor({ onClaimed }) {
 
   useEffect(() => {
     load();
-    timer.current = setInterval(load, REFRESH_MS);
+    const every = selected ? REFRESH_WHILE_CHOOSING_MS : REFRESH_MS;
+    timer.current = setInterval(load, every);
     return () => clearInterval(timer.current);
-  }, [load]);
+  }, [load, selected]);
 
   const chosen = desks?.find((d) => String(d.id) === String(selected));
+
+  // The desk went while the form was open. Said plainly, rather than letting
+  // somebody finish typing a visitor's details into a claim that cannot land.
+  const takenWhileChoosing = Boolean(selected) && chosen && chosen.status !== 'free';
 
   // Every half hour from the next boundary up to the point the desk stops being
   // free — the next booking, or the end of the day. Only the end is chosen; the
@@ -75,7 +92,9 @@ export default function LiveFloor({ onClaimed }) {
 
   const guestReady =
     guest.firstName.trim() && guest.lastName.trim() && guest.email.trim() && hostEmail.trim();
-  const ready = who === 'staff' ? Boolean(email.trim()) : Boolean(guestReady);
+  const ready =
+    !takenWhileChoosing &&
+    (who === 'staff' ? Boolean(email.trim()) : Boolean(guestReady));
 
   const resetForm = () => {
     setSelected(null);
@@ -246,6 +265,12 @@ export default function LiveFloor({ onClaimed }) {
               </p>
             </div>
           )}
+          {takenWhileChoosing && (
+            <p className="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-3 py-2 text-sm">
+              Somebody took Desk# {chosen.number} while you were filling this in. Pick another.
+            </p>
+          )}
+
           {error && (
             <p className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2 text-sm">
               {error}
