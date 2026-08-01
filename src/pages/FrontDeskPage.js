@@ -18,19 +18,30 @@ const CLEAR_WITH_CODE_MS = 45000;
 
 // The front desk.
 //
-// A narrower sibling of the confirmation-code page. That one runs on your own
-// device and lets you cancel; this one is a shared screen with somebody
-// standing at it, so it deliberately cannot cancel anything and shows only
-// today. On a shared surface, cancel is somebody else's booking one careless
-// tap away.
+// One column, ordered by likelihood: most people walking up already have a
+// booking, so checking in is the first thing on the screen and costs one row.
+// The floor plan sits under it with the full width of the page, which is the
+// widest it can be — it is an image with a fixed aspect ratio, so width is the
+// only thing that makes it bigger.
 //
-// Nothing here needs a sign-in. The code is the credential, and it is the only
-// one a sponsored visitor will ever have.
+// Anything that grows — the claim form, the result — is a layer over the page
+// rather than a section within it. On a landscape iPad there are about ninety
+// pixels left under the map and the visitor form needs three hundred and
+// thirty, so an inline form could only fit by shrinking the map to nothing. A
+// dialog keeps the page one screen tall and never scrolling.
+//
+// It remains a narrower sibling of the confirmation-code page: this one is a
+// shared screen with somebody standing at it, so it cannot cancel anything and
+// shows only today. Nothing here needs a sign-in — the code is the credential,
+// and it is the only one a sponsored visitor will ever have.
 export default function FrontDeskPage() {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState(null);   // { name, deskNumber, ... }
+  const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  // Bumped when a check-in lands, so the floor below re-reads at once rather
+  // than insisting the desk is free until its next poll.
+  const [floorKey, setFloorKey] = useState(0);
   const inputRef = useRef(null);
   const timerRef = useRef(null);
 
@@ -63,6 +74,7 @@ export default function FrontDeskPage() {
     setError(null);
     try {
       setResult(await checkIn(entered));
+      setFloorKey((k) => k + 1);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -71,45 +83,90 @@ export default function FrontDeskPage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-surface-page px-4 md:px-6 py-5">
-      {/* `m-auto` rather than `justify-center` on the parent. Both centre while
-          the content fits, but justify-center clips at *both* ends once it does
-          not — and the visitor form, which is four fields taller, does not.
-          Auto margins collapse instead, so the overflow stays reachable. */}
-      <div className="w-full max-w-[92rem] mx-auto m-auto flex flex-col gap-4">
+    <div className="flex-1 flex flex-col bg-surface-page px-3 md:px-5 py-3 md:py-4 gap-3 min-h-0">
 
-      <div className="flex items-baseline justify-between gap-4 flex-wrap">
-        <h1 className="text-2xl md:text-3xl font-bold text-mqd-title">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <h1 className="text-xl md:text-2xl font-bold text-mqd-title">
           Welcome — check in or take a desk
         </h1>
         <Clock />
       </div>
 
-      {/* The floor plan is what somebody reads from a few paces away, so it
-          takes the room. Check-in is a panel beside it rather than an equal
-          half: it is a short interaction with a keyboard, not something to
-          look at. */}
-      {/* Centred rather than stretched. The floor plan is an image with a fixed
-          aspect ratio, so it is bound by the width of its column and cannot grow
-          into extra height — stretching the card only opened a white void
-          beneath it. Even space above and below reads as a choice; a void
-          inside a card reads as a bug. */}
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2.6fr)_minmax(20rem,1fr)] gap-5 items-start">
-
-        <div className="order-2 lg:order-1 bg-white rounded-2xl shadow-modal p-5 md:p-6 flex">
-          <LiveFloor onClaimed={setResult} />
+      {/* One row, because checking in is one field and a button. It was a card
+          as tall as the floor plan beside it, which stranded a column of empty
+          space every time the map grew and the card could not. */}
+      <form
+        onSubmit={submit}
+        className="bg-white rounded-xl shadow-modal px-4 py-3 flex items-center gap-3 flex-wrap md:flex-nowrap shrink-0"
+      >
+        <div className="flex items-center gap-2.5 shrink-0">
+          <DoorOpen className="w-6 h-6 text-mqd-title" />
+          <div className="leading-tight">
+            <p className="font-bold text-mqd-title">Already booked?</p>
+            <p className="text-ink-muted text-xs">Enter your confirmation code.</p>
+          </div>
         </div>
 
-        <div className="order-1 lg:order-2 flex flex-col">
-        {result ? (
-          <div className="bg-white rounded-2xl shadow-modal p-6 flex flex-col items-center gap-3 text-center">
+        <input
+          ref={inputRef}
+          value={code}
+          onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(null); }}
+          placeholder="8 characters"
+          aria-label="Confirmation code"
+          autoComplete="off"
+          autoCapitalize="characters"
+          spellCheck="false"
+          maxLength={12}
+          className="flex-1 min-w-[10rem] text-center font-mono text-xl md:text-2xl tracking-[0.2em] uppercase
+                     border-2 border-surface-line rounded-lg px-3 py-2.5
+                     placeholder:font-sans placeholder:text-sm placeholder:tracking-normal
+                     placeholder:normal-case placeholder:text-ink-muted
+                     focus:outline-none focus:border-mqd-btn focus:ring-2 focus:ring-mqd-btn/30"
+        />
+
+        <button
+          type="submit"
+          disabled={!code.trim() || busy}
+          className="shrink-0 bg-mqd-btn hover:bg-mqd-btn-hover disabled:opacity-40 disabled:cursor-not-allowed
+                     text-white font-semibold px-6 py-3 rounded-lg transition"
+        >
+          {busy ? 'Checking in…' : 'Check in'}
+        </button>
+      </form>
+
+      {error && (
+        <p className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-2.5 text-sm shrink-0">
+          <XCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </p>
+      )}
+
+      {/* The floor gets the whole width and whatever height is left. */}
+      <div className="bg-white rounded-xl shadow-modal p-3 md:p-4 flex-1 min-h-0 flex">
+        <LiveFloor onClaimed={setResult} refreshKey={floorKey} />
+      </div>
+
+      {result && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={reset}
+          role="presentation"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Checked in"
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl shadow-modal p-6 md:p-8 w-full max-w-md
+                       flex flex-col items-center gap-3 text-center max-h-full overflow-y-auto"
+          >
             <CheckCircle2 className="w-14 h-14 text-mqd-btn" />
             <p className="text-ink-muted text-sm">Checked in</p>
-            <p className="text-3xl font-bold text-mqd-title">{result.name}</p>
+            <p className="text-2xl md:text-3xl font-bold text-mqd-title">{result.name}</p>
 
             {/* The desk number is the one thing they came here to find out, so
                 it is the largest thing on the screen. */}
-            <div className="bg-mqd-50 border border-mqd-200 rounded-xl px-8 py-5 w-full">
+            <div className="bg-mqd-50 border border-mqd-200 rounded-xl px-6 py-4 w-full">
               <p className="text-ink-muted text-xs uppercase tracking-wide">Your desk</p>
               <p className="text-5xl font-bold text-mqd-title leading-tight">
                 Desk# {result.deskNumber}
@@ -142,63 +199,13 @@ export default function FrontDeskPage() {
 
             <button
               onClick={reset}
-              className="text-ink-muted hover:text-mqd-title text-sm font-medium underline underline-offset-4"
+              className="mt-1 bg-mqd-btn hover:bg-mqd-btn-hover text-white font-semibold px-8 py-2.5 rounded-lg transition"
             >
               Done
             </button>
           </div>
-        ) : (
-          <form onSubmit={submit} className="bg-white rounded-2xl shadow-modal p-6 flex flex-col gap-4">
-            <div className="flex items-center gap-3">
-              <DoorOpen className="w-8 h-8 text-mqd-title shrink-0" />
-              <div className="min-w-0">
-                <h2 className="text-xl font-bold text-mqd-title leading-tight">Already booked?</h2>
-                <p className="text-ink-muted text-sm">Enter your confirmation code.</p>
-              </div>
-            </div>
-
-            <input
-              ref={inputRef}
-              value={code}
-              onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(null); }}
-              placeholder="8 characters"
-              aria-label="Confirmation code"
-              autoComplete="off"
-              autoCapitalize="characters"
-              spellCheck="false"
-              maxLength={12}
-              className="w-full text-center font-mono text-2xl md:text-3xl tracking-[0.25em] uppercase
-                         border-2 border-surface-line rounded-xl px-3 py-4
-                         placeholder:font-sans placeholder:text-base placeholder:tracking-normal
-                         placeholder:normal-case placeholder:text-ink-muted
-                         focus:outline-none focus:border-mqd-btn focus:ring-2 focus:ring-mqd-btn/30"
-            />
-
-            {error && (
-              <p className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
-                <XCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>{error}</span>
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={!code.trim() || busy}
-              className="bg-mqd-btn hover:bg-mqd-btn-hover disabled:opacity-40 disabled:cursor-not-allowed
-                         text-white font-semibold text-lg py-4 rounded-xl transition"
-            >
-              {busy ? 'Checking in…' : 'Check in'}
-            </button>
-
-            <p className="text-ink-muted text-xs text-center">
-              No code? The person at the front desk can look up your booking.
-            </p>
-          </form>
-        )}
-
         </div>
-      </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -313,3 +313,13 @@ test('a chosen end that the clock has passed falls to the nearest still on offer
     jest.useRealTimers();
   }
 });
+
+test('it re-reads on demand, so a check-in elsewhere is reflected at once', async () => {
+  const { rerender } = render(<LiveFloor refreshKey={0} />);
+  await screen.findByText(/2 of 4 desks free/);
+  const before = api.getDeskStatus.mock.calls.length;
+
+  rerender(<LiveFloor refreshKey={1} />);
+
+  await waitFor(() => expect(api.getDeskStatus.mock.calls.length).toBeGreaterThan(before));
+});

@@ -28,7 +28,7 @@ const REFRESH_WHILE_CHOOSING_MS = 5000;
 // Deliberately carries no names. It is shown on a screen anybody can walk up
 // to, and a map of who sits where would publish staff whereabouts to every
 // visitor and contractor passing through.
-export default function LiveFloor({ onClaimed }) {
+export default function LiveFloor({ onClaimed, refreshKey = 0 }) {
   const [desks, setDesks] = useState(null);
   // The server's clock, not the browser's. A kiosk left running for months is
   // exactly the machine whose clock drifts, and the two disagreeing would offer
@@ -65,12 +65,16 @@ export default function LiveFloor({ onClaimed }) {
     }
   }, []);
 
+  // refreshKey re-reads on demand. Somebody checks in through the panel above,
+  // their desk becomes occupied, and the map would otherwise go on saying every
+  // desk is free for up to twenty seconds — a screen contradicting what the
+  // person standing at it has just done.
   useEffect(() => {
     load();
     const every = selected ? REFRESH_WHILE_CHOOSING_MS : REFRESH_MS;
     timer.current = setInterval(load, every);
     return () => clearInterval(timer.current);
-  }, [load, selected]);
+  }, [load, selected, refreshKey]);
 
   const chosen = desks?.find((d) => String(d.id) === String(selected));
 
@@ -168,6 +172,7 @@ export default function LiveFloor({ onClaimed }) {
         )}
       </div>
 
+      <div className="flex-1 min-h-0 flex flex-col justify-center">
       <DeskMap
         desks={desks ?? []}
         loading={!desks}
@@ -180,10 +185,37 @@ export default function LiveFloor({ onClaimed }) {
         }}
         compact
       />
+      </div>
       <DeskMapLegend live />
 
-      {chosen ? (
-        <form onSubmit={claim} className="bg-mqd-50 border border-mqd-200 rounded-xl p-4 flex flex-col gap-3">
+      <p className={`text-sm rounded-lg px-3 py-2.5 shrink-0 ${
+        freeCount > 0
+          ? 'bg-mqd-50 border border-mqd-200 text-ink-body'
+          : 'bg-amber-50 border border-amber-200 text-amber-900'
+      }`}>
+        {freeCount > 0
+          ? 'No booking? Tap any green desk to take it for today.'
+          : 'Every desk is taken at the moment. Ask the person at the front desk.'}
+      </p>
+
+      {/* A layer rather than a section. Inline, this form pushed the page past
+          the height of a landscape iPad and the submit button ended up behind a
+          scroll on a screen somebody is standing at. */}
+      {chosen && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => { resetForm(); setError(null); }}
+          role="presentation"
+        >
+        <form
+          onSubmit={claim}
+          onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Take Desk# ${chosen.number}`}
+          className="bg-white rounded-2xl shadow-modal p-5 md:p-6 w-full max-w-lg
+                     flex flex-col gap-3 max-h-full overflow-y-auto"
+        >
           <p className="text-ink-body text-sm">
             <span className="font-semibold text-mqd-title">Desk# {chosen.number}</span>{' '}
             — free until {formatMinutes(chosen.freeUntilMin)}
@@ -303,22 +335,13 @@ export default function LiveFloor({ onClaimed }) {
             <button
               type="button"
               onClick={() => { resetForm(); setError(null); }}
-              className="border border-surface-line hover:bg-surface-panel text-ink-body font-semibold px-4 rounded-lg text-sm transition"
+              className="border border-surface-line hover:bg-surface-panel text-ink-body font-semibold px-5 py-2.5 rounded-lg text-sm transition"
             >
               Cancel
             </button>
           </div>
         </form>
-      ) : (
-        <p className={`text-sm rounded-lg px-3 py-2.5 ${
-          freeCount > 0
-            ? 'bg-mqd-50 border border-mqd-200 text-ink-body'
-            : 'bg-amber-50 border border-amber-200 text-amber-900'
-        }`}>
-          {freeCount > 0
-            ? 'No booking? Tap any green desk to take it for today.'
-            : 'Every desk is taken at the moment. Ask the person at the front desk.'}
-        </p>
+        </div>
       )}
     </div>
   );
