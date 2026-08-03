@@ -56,9 +56,22 @@ export const deskStatuses = (
     return { ...desk, status: 'available' };
   });
 
+// Statuses are database-shaped; a screen reader should not have to say
+// "in underscore use".
+const STATUS_WORDS = {
+  in_use: 'in use',
+  reserved: 'reserved, nobody here yet',
+};
+const statusWords = (status) => STATUS_WORDS[status] || status;
+
 const deskColor = (status, selected) => {
   if (selected) return 'bg-mqd-title ring-2 ring-mqd-title/40';
   if (status === 'booked') return 'bg-rose-500 opacity-85';
+  // Live statuses, for a map showing the floor as it stands rather than a
+  // window somebody is choosing. `in_use` is somebody in the seat; `reserved`
+  // is booked with nobody there yet, which is a different thing to walk past.
+  if (status === 'in_use') return 'bg-rose-500 opacity-85';
+  if (status === 'reserved') return 'bg-amber-400';
   if (status === 'current') return 'bg-sky-500';
   if (status === 'partial') return 'bg-amber-400';
   return 'bg-emerald-500';
@@ -70,10 +83,19 @@ const LEGEND = [
   { color: 'bg-sky-500',     label: 'Current desk', onlyWithCurrent: true },
 ];
 
-export function DeskMapLegend({ showCurrent = false, className = '' }) {
+// The live floor reads differently: three states about right now, not two about
+// a window being chosen.
+const LIVE_LEGEND = [
+  { color: 'bg-emerald-500', label: 'Free' },
+  { color: 'bg-amber-400',   label: 'Reserved, nobody here yet' },
+  { color: 'bg-rose-500',    label: 'In use' },
+];
+
+export function DeskMapLegend({ showCurrent = false, live = false, className = '' }) {
+  const items = live ? LIVE_LEGEND : LEGEND;
   return (
     <div className={`flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-body ${className}`}>
-      {LEGEND.filter((item) => showCurrent || !item.onlyWithCurrent).map((item) => (
+      {items.filter((item) => showCurrent || !item.onlyWithCurrent).map((item) => (
         <div key={item.label} className="flex items-center gap-2">
           <div className={`w-4 h-3 rounded ${item.color}`} />
           <span>{item.label}</span>
@@ -114,7 +136,8 @@ export default function DeskMap({
         // 'partial' is shown but not offered: a recurring pattern needs a desk
         // free on every one of its days, so a desk that is nearly free is still
         // not usable. Only the booking flows produce 'partial'.
-        const clickable = desk.status === 'available' || desk.status === 'current';
+        const clickable =
+          desk.status === 'available' || desk.status === 'current' || desk.status === 'free';
 
         return (
           <button
@@ -122,7 +145,7 @@ export default function DeskMap({
             type="button"
             disabled={!clickable}
             onClick={() => clickable && onSelect?.(desk)}
-            aria-label={`Desk ${desk.number}, ${desk.status}`}
+            aria-label={`Desk ${desk.number}, ${statusWords(desk.status)}`}
             className={`absolute flex items-center justify-center rounded text-white font-bold
               shadow-md transition select-none whitespace-nowrap overflow-hidden
               ${deskColor(desk.status, isSelected)}

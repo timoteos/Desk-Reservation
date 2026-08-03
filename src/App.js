@@ -7,6 +7,7 @@ import DeskSelectionPage from './pages/DeskSelectionPage';
 import UserConfirmationPage from './pages/UserConfirmationPage';
 import AdminLoginPage from './pages/AdminLoginPage';
 import ConfirmationCodePage from './pages/ConfirmationCodePage';
+import FrontDeskPage from './pages/FrontDeskPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import RecurringSchedulePage from './pages/RecurringSchedulePage';
 import RequireAdmin from './components/RequireAdmin';
@@ -25,6 +26,9 @@ export default function App() {
           <Route path="/request" element={<UserConfirmationPage />} />
           <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route path="/confirmation-code" element={<ConfirmationCodePage />} />
+          {/* A shared screen at reception. Public by design — the code is the
+              credential, and a visitor has no other. */}
+          <Route path="/front-desk" element={<FrontDeskPage />} />
           <Route
             path="/admin/dashboard"
             element={

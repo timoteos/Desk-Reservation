@@ -19,6 +19,10 @@ const ACTIVITIES = {
   series_ended: 'Recurring schedule ended',
   expired: 'Request expired unreviewed',
   schedule_requested: 'Recurring schedule requested',
+  checked_in: 'Checked in',
+  // Distinct from 'expired', which is about a request nobody reviewed. This is
+  // about a desk nobody sat at.
+  released_no_show: 'Desk released, nobody arrived',
 };
 
 async function seedActivities(client = { query }) {

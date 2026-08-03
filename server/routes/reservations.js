@@ -10,6 +10,7 @@ const {
 const { expirePending, expiryFor } = require('../lib/expirePending');
 const { recordActivity } = require('../lib/activityLog');
 const { tooSoonError, officeHoursError, workingDayError } = require('../lib/officeHours');
+const { checkInByCode, releaseNoShows } = require('../lib/checkIn');
 const { bookableDeskError } = require('../lib/deskGuard');
 const { endSeries } = require('../lib/endSeries');
 
@@ -43,6 +44,7 @@ router.get('/', async (req, res, next) => {
     // Stale pending requests still hold their desk, so clear them before
     // reporting what's booked.
     await expirePending();
+    await releaseNoShows();
 
     const { date, scope } = req.query;
 
@@ -250,6 +252,41 @@ router.get('/code/:code', async (req, res, next) => {
     if (schedule) return res.json(schedule);
 
     return res.status(404).json({ message: 'Reservation not found' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/reservations/code/:code/check-in
+//
+// Open, because the confirmation code is the credential — and the only one a
+// sponsored visitor will ever have. Resolves to today's occurrence, so a
+// schedule's single code checks its holder in on whichever day they turn up.
+router.post('/code/:code/check-in', async (req, res, next) => {
+  try {
+    await releaseNoShows();
+
+    const result = await checkInByCode(req.params.code.trim().toUpperCase());
+
+    if (!result.ok) {
+      if (result.code === 'not_found') {
+        // One message for a code that does not exist and a code for another
+        // day, so the endpoint cannot be used to test whether a code is real.
+        return res.status(404).json({
+          message: 'No booking for today with that code. Check the code, or ask the front desk.',
+        });
+      }
+      return res.status(409).json({ message: result.message, reason: result.code });
+    }
+
+    const { booking, reclaimed } = result;
+    res.json({
+      name: `${booking.first_name} ${booking.last_name}`,
+      deskNumber: booking.desk_number,
+      startMin: toMinutes(booking.starts_at),
+      endMin: toMinutes(booking.ends_at),
+      reclaimed,
+    });
   } catch (err) {
     next(err);
   }

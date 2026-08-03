@@ -52,7 +52,12 @@ const OFFICE_HOURS_LABEL = `${formatMinutes(OFFICE_START)} – ${formatMinutes(O
 
 // Returns null when the window is fine, or a message explaining what is wrong.
 // One function so every route rejects the same things for the same reasons.
-function officeHoursError(startMin, endMin) {
+// `alignStart: false` for a desk claimed on the spot. The half-hour rule exists
+// so pickers offer a tidy list of choices; somebody standing at a free desk at
+// 11:37 is not choosing a start, they are taking one. Making them wait until
+// 12:00 would be the rule enforcing itself against its own purpose. The end is
+// still aligned, because that one is chosen.
+function officeHoursError(startMin, endMin, { alignStart = true } = {}) {
   if (!Number.isInteger(startMin) || !Number.isInteger(endMin)) {
     return 'Start and end times must be whole minutes.';
   }
@@ -62,7 +67,7 @@ function officeHoursError(startMin, endMin) {
   if (startMin < OFFICE_START || endMin > OFFICE_END) {
     return `Bookings must fall within office hours, ${OFFICE_HOURS_LABEL}.`;
   }
-  if (startMin % SLOT_MINUTES !== 0 || endMin % SLOT_MINUTES !== 0) {
+  if ((alignStart && startMin % SLOT_MINUTES !== 0) || endMin % SLOT_MINUTES !== 0) {
     return `Bookings start and end on the half hour.`;
   }
   return null;
