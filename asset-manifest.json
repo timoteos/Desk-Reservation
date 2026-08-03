@@ -1,7 +1,7 @@
 {
   "files": {
-    "main.css": "/Desk-Reservation/static/css/main.936fe72e.css",
-    "main.js": "/Desk-Reservation/static/js/main.c5cf8a89.js",
+    "main.css": "/Desk-Reservation/static/css/main.b5e7ab8b.css",
+    "main.js": "/Desk-Reservation/static/js/main.9c4f4650.js",
     "static/js/453.4de4dfe6.chunk.js": "/Desk-Reservation/static/js/453.4de4dfe6.chunk.js",
     "static/media/public-sans-latin-700-normal.woff": "/Desk-Reservation/static/media/public-sans-latin-700-normal.cdb7a7a7c11d41f99910.woff",
     "static/media/public-sans-latin-600-normal.woff": "/Desk-Reservation/static/media/public-sans-latin-600-normal.c875eed242e01bfe8b25.woff",
@@ -22,12 +22,12 @@
     "static/media/public-sans-vietnamese-700-normal.woff2": "/Desk-Reservation/static/media/public-sans-vietnamese-700-normal.0cf3076d5b4313830af5.woff2",
     "static/media/public-sans-vietnamese-600-normal.woff2": "/Desk-Reservation/static/media/public-sans-vietnamese-600-normal.65db7db0418b19708f91.woff2",
     "index.html": "/Desk-Reservation/index.html",
-    "main.936fe72e.css.map": "/Desk-Reservation/static/css/main.936fe72e.css.map",
-    "main.c5cf8a89.js.map": "/Desk-Reservation/static/js/main.c5cf8a89.js.map",
+    "main.b5e7ab8b.css.map": "/Desk-Reservation/static/css/main.b5e7ab8b.css.map",
+    "main.9c4f4650.js.map": "/Desk-Reservation/static/js/main.9c4f4650.js.map",
     "453.4de4dfe6.chunk.js.map": "/Desk-Reservation/static/js/453.4de4dfe6.chunk.js.map"
   },
   "entrypoints": [
-    "static/css/main.936fe72e.css",
-    "static/js/main.c5cf8a89.js"
+    "static/css/main.b5e7ab8b.css",
+    "static/js/main.9c4f4650.js"
   ]
 }
