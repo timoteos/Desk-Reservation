@@ -89,17 +89,26 @@ test('switching desks drops a choice the new desk could not honour', async () =>
   fireEvent.click(screen.getByLabelText('Desk 4, free'));
   fireEvent.change(screen.getByRole('combobox'), { target: { value: '960' } });
 
-  // Desk 3 stops at 1pm. The old choice must not survive.
+  // Desk 3 stops at 1pm — 4:00 was never even on offer there. It must not
+  // survive the switch; the new desk falls back to its own soonest slot
+  // (noon) rather than carrying the old desk's choice, or the old desk's
+  // notion of "as late as possible", forward.
   fireEvent.click(screen.getByLabelText('Desk 3, free'));
-  expect(screen.getByRole('button', { name: /take it until 1:00 PM/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /take it until 12:00 PM/i })).toBeInTheDocument();
 });
 
-test('taking a desk sends the desk and the address, and reports back', async () => {
+test('taking a desk defaults to the soonest slot, not the whole afternoon', async () => {
+  // now is 11:40; the soonest bookable end for desk 4 is noon. Defaulting to
+  // 5pm meant somebody who forgot to touch the dropdown held a desk all
+  // afternoon for what might have been a ten-minute errand.
   const onClaimed = jest.fn();
   render(<LiveFloor onClaimed={onClaimed} />);
   await screen.findByText(/2 of 4 desks free/);
 
   fireEvent.click(screen.getByLabelText('Desk 4, free'));
+  expect(screen.getByRole('combobox')).toHaveValue('720');
+  expect(screen.getByRole('button', { name: /take it until 12:00 PM/i })).toBeInTheDocument();
+
   fireEvent.change(screen.getByLabelText(/your email address/i), {
     target: { value: 'mark.burgess@dhs.hawaii.gov' },
   });
@@ -107,7 +116,7 @@ test('taking a desk sends the desk and the address, and reports back', async () 
 
   await waitFor(() => expect(api.claimDesk).toHaveBeenCalledWith(4, {
     email: 'mark.burgess@dhs.hawaii.gov',
-    endMin: 1020,
+    endMin: 720,
   }));
   await waitFor(() => expect(onClaimed).toHaveBeenCalled());
 });
@@ -244,7 +253,7 @@ test('a visitor gives their own details and names who they are seeing', async ()
   await waitFor(() => expect(api.claimDesk).toHaveBeenCalledWith(4, {
     guest: { firstName: 'Ana', lastName: 'Cruz', email: 'ana@acme.test', organization: 'Acme' },
     hostEmail: 'rhona.ramos@dhs.hawaii.gov',
-    endMin: 1020,
+    endMin: 720,   // the soonest slot, same default as the staff path
   }));
 });
 
