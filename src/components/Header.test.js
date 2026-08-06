@@ -74,3 +74,44 @@ test('every other page keeps the full name', () => {
   renderAt('/', null);
   expect(screen.getByText(/MQD Desk Reservation Systems Office/)).toBeInTheDocument();
 });
+
+// The title used to be plain text inside the admin area, because an early
+// version of it stranded admins on the public side. The Dashboard button is
+// that route back, so the round trip is closed and the title can behave the way
+// a title anywhere else does.
+describe('the title goes home', () => {
+  test('from inside the admin area', () => {
+    renderAt('/admin/dashboard', ADMIN);
+    expect(screen.getByRole('link', { name: /home/i })).toHaveAttribute('href', '/');
+  });
+
+  test('from the public side', () => {
+    renderAt('/calendar', null);
+    expect(screen.getByRole('link', { name: /home/i })).toHaveAttribute('href', '/');
+  });
+
+  // Clicking home and then back again, which is the whole reason the title was
+  // held back before.
+  test('and the way back is there when you arrive', () => {
+    renderAt('/', ADMIN);
+    expect(screen.getByRole('link', { name: /home/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /dashboard/i })).toBeInTheDocument();
+  });
+
+  // A heading reading "Admin Dashboard" that navigates away from the dashboard
+  // would name the wrong destination.
+  test('and says where it goes, not where you are', () => {
+    renderAt('/admin/dashboard', ADMIN);
+    expect(screen.getByRole('heading', { name: /MQD Desk Reservation Systems Office/i }))
+      .toBeInTheDocument();
+    expect(screen.queryByText('Admin Dashboard')).not.toBeInTheDocument();
+  });
+
+  // The lobby screen keeps plain text: every control that leads anywhere is
+  // deliberately absent from a screen anybody can walk up to.
+  test('except on the kiosk, where nothing leads anywhere', () => {
+    renderAt('/front-desk', ADMIN);
+    expect(screen.queryByRole('link', { name: /home/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /MQD Front Desk/i })).toBeInTheDocument();
+  });
+});

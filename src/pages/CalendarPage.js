@@ -10,6 +10,7 @@ import {
   SLOT_MINUTES as INCREMENT,
   WORKING_DAYS,
   formatMinutes,
+  formatDuration,
   earliestStartOn,
 } from '../lib/officeHours';
 
@@ -224,9 +225,9 @@ export default function CalendarPage() {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
   });
 
-  const durationLabel = durationMins >= 60
-    ? `${durationMins / 60} hour${durationMins > 60 ? 's' : ''}`
-    : `${durationMins} minutes`;
+  // Was `durationMins / 60` with an "s" bolted on, which read "1.5 hours" the
+  // moment bookings could step by the half hour.
+  const durationLabel = formatDuration(durationMins);
 
   return (
     <>
@@ -245,7 +246,10 @@ export default function CalendarPage() {
         <div className="bg-white rounded-xl border border-surface-line p-6 w-80 max-w-full flex flex-col gap-4 opacity-0 animate-fade-up" style={{ animationDelay: '100ms' }}>
           <div className="text-center">
             <p className="text-mqd-title font-semibold">{formattedDate}</p>
-            <p className="text-ink-muted text-xs mt-1">{durationLabel} blocks</p>
+            {/* "Blocks of 30 minutes" rather than "30 minutes blocks", which is
+                what a template of `${label} blocks` produced once the label
+                could be a phrase like "1 hour 30 minutes". */}
+            <p className="text-ink-muted text-xs mt-1">Blocks of {durationLabel}</p>
           </div>
 
           <div key={dateStr} className="flex flex-col gap-2 max-h-80 overflow-y-auto pr-1 animate-fade-scale">

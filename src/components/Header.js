@@ -2,10 +2,18 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Lock, LogOut, UserRound, LayoutDashboard } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-// Inside the admin area the title is plain text — making it a home link there
-// is what stranded admins on the public side in the first place.
-function TitleWrapper({ inAdminArea, children }) {
-  if (inAdminArea) {
+// The title is a home link everywhere except the front-desk kiosk.
+//
+// It used to be plain text inside the admin area, because an early version made
+// it a link and stranded admins on the public side with no route back. That
+// objection no longer holds: the Dashboard button added on 30 July is exactly
+// that route, and it appears the moment you leave the admin area — so the round
+// trip is closed and the ordinary convention can apply.
+//
+// The kiosk keeps plain text on purpose. Every control that leads anywhere is
+// removed from a screen anybody can walk up to.
+function TitleWrapper({ plain, children }) {
+  if (plain) {
     return <div className="flex items-center gap-3 md:gap-4 flex-1 min-w-0">{children}</div>;
   }
   return (
@@ -46,7 +54,7 @@ export default function Header() {
     <header className="bg-white border-t-4 border-blue-400 px-4 md:px-6 py-3 flex items-center gap-3 md:gap-4">
       {/* Logos and title are one link home — the convention people reach for
           without being told, and it works on every page. */}
-      <TitleWrapper inAdminArea={inAdminArea || onSharedScreen}>
+      <TitleWrapper plain={onSharedScreen}>
         <div className="flex items-center gap-2 md:gap-3 shrink-0">
           <img src={`${process.env.PUBLIC_URL}/logos/dhs.png`} alt="DHS Seal" className="w-10 h-10 md:w-14 md:h-14 object-contain" onError={(e) => { e.target.style.display='none'; }} />
           <img src={`${process.env.PUBLIC_URL}/logos/soh.png`} alt="State of Hawaii Seal" className="w-10 h-10 md:w-14 md:h-14 object-contain" onError={(e) => { e.target.style.display='none'; }} />
@@ -55,12 +63,13 @@ export default function Header() {
         {/* "Front Desk" rather than "Front Office": one names the desk you are
             standing at, the other is a way of describing the administrative side
             of a division, and a visitor reading a sign wants the first. */}
-        <h1 className={`text-lg md:text-3xl font-extrabold text-mqd-title leading-tight ${inAdminArea || onSharedScreen ? '' : 'group-hover:text-mqd-btn-hover transition-colors'}`}>
-          {inAdminArea
-            ? 'Admin Dashboard'
-            : onSharedScreen
-              ? 'MQD Front Desk'
-              : 'MQD Desk Reservation Systems Office'}
+        {/* The site's name, including inside the admin area, because that is
+            where the link now goes — a heading reading "Admin Dashboard" that
+            navigates away from the dashboard would be a label for the wrong
+            destination. Which tab you are on is already said by the tab bar and
+            the heading beneath it. */}
+        <h1 className={`text-lg md:text-3xl font-extrabold text-mqd-title leading-tight ${onSharedScreen ? '' : 'group-hover:text-mqd-btn-hover transition-colors'}`}>
+          {onSharedScreen ? 'MQD Front Desk' : 'MQD Desk Reservation Systems Office'}
         </h1>
       </TitleWrapper>
       {onSharedScreen ? null : admin ? (

@@ -37,6 +37,20 @@ export const toMinutes = (value) => {
 
 export const OFFICE_HOURS_LABEL = `${formatMinutes(OFFICE_START)} – ${formatMinutes(OFFICE_END)}`;
 
+// How long a booking runs, said the way a person would say it.
+//
+// Not the same job as formatMinutes, which turns minutes-from-midnight into a
+// clock time. Bookings now step by the half hour, and the old expression here
+// divided by 60 — so ninety minutes read as "1.5 hours", which nobody says.
+export const formatDuration = (mins) => {
+  const hours = Math.floor(mins / 60);
+  const rest = mins % 60;
+  const parts = [];
+  if (hours) parts.push(`${hours} hour${hours === 1 ? '' : 's'}`);
+  if (rest) parts.push(`${rest} minutes`);
+  return parts.join(' ') || '0 minutes';
+};
+
 // Every legal time on the half hour. `from` excludes earlier options, which is
 // what an end-time picker needs so it can never sit at or before the start.
 export const timeOptions = ({ from = OFFICE_START, to = OFFICE_END } = {}) => {
