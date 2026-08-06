@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, RotateCcw, Clock, CalendarDays, LayoutGrid, Shuffle } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
-import { MINS_IN_WORKDAY } from '../lib/officeHours';
+import { MINS_IN_WORKDAY, SLOT_MINUTES, formatDuration } from '../lib/officeHours';
 
 const CRUMBS = [
   { label: 'Landing', path: '/' },
@@ -20,9 +20,14 @@ export default function ReservationPage() {
   // doesn't discard what was already chosen.
   const initialType = searchParams.get('type') === 'full' ? 'full' : 'hourly';
   const initialDuration = parseInt(searchParams.get('duration') || '', 10);
+  // Counted in half hours rather than whole ones. Somebody who needs a desk
+  // for a thirty-minute call had to book an hour and hold it for twice as long
+  // as they needed, which is the same waste the walk-up duration default was
+  // fixed for.
+  const UNIT = SLOT_MINUTES;
   const initialCount = Number.isNaN(initialDuration)
-    ? 1
-    : Math.max(1, Math.round(initialDuration / (initialType === 'full' ? MINS_IN_WORKDAY : 60)));
+    ? 2
+    : Math.max(1, Math.round(initialDuration / (initialType === 'full' ? MINS_IN_WORKDAY : UNIT)));
 
   const [type, setType] = useState(initialType);
   const [count, setCount] = useState(initialCount);
@@ -38,14 +43,15 @@ export default function ReservationPage() {
   //
   // Multi-day stays are made as one booking per day until the calendar can span
   // dates, so the count is capped rather than the message reworded.
-  const maxCount = type === 'hourly' ? 8 : 1;
+  // Still a full office day at the top end, now reachable in half-hour steps.
+  const maxCount = type === 'hourly' ? MINS_IN_WORKDAY / UNIT : 1;
 
   const decrement = () => setCount((prev) => Math.max(1, prev - 1));
   const increment = () => setCount((prev) => Math.min(maxCount, prev + 1));
 
   const handleSeeAvailability = () => {
     const startDate = noEarlierThan || today;
-    const durationMins = type === 'hourly' ? count * 60 : MINS_IN_WORKDAY * count;
+    const durationMins = type === 'hourly' ? count * UNIT : MINS_IN_WORKDAY * count;
     navigate(
       `/calendar?startDate=${startDate}&duration=${durationMins}&type=${type}&deskChoice=${deskChoice}`
     );
@@ -68,7 +74,7 @@ export default function ReservationPage() {
             <p className="text-ink-body font-medium mb-2">Reservation type</p>
             <div className="flex rounded-lg border border-surface-line overflow-hidden">
               <button
-                onClick={() => { setType('hourly'); setCount(1); }}
+                onClick={() => { setType('hourly'); setCount(2); }}
                 className={`flex-1 py-3 text-sm font-semibold transition flex items-center justify-center gap-2
                   ${type === 'hourly' ? 'bg-mqd-btn text-white' : 'bg-white text-ink-body hover:bg-surface-panel'}`}
               >
@@ -89,7 +95,7 @@ export default function ReservationPage() {
           {/* Count stepper */}
           <div>
             <p className="text-ink-body font-medium mb-2">
-              {type === 'full' ? 'Number of days' : 'Number of hours'}
+              {type === 'full' ? 'Number of days' : 'How long'}
             </p>
             <div className="flex items-center gap-4">
               <button
@@ -99,7 +105,9 @@ export default function ReservationPage() {
               >
                 −
               </button>
-              <span className="text-mqd-title text-xl font-semibold w-10 h-10 flex items-center justify-center rounded-lg bg-mqd-btn/10">{count}</span>
+              <span className="text-mqd-title text-lg font-semibold min-w-[8.5rem] h-10 px-3 flex items-center justify-center rounded-lg bg-mqd-btn/10 whitespace-nowrap">
+                {type === 'full' ? count : formatDuration(count * UNIT)}
+              </span>
               <button
                 onClick={increment}
                 disabled={count >= maxCount}
@@ -110,7 +118,7 @@ export default function ReservationPage() {
               <span className="text-ink-muted text-sm">
                 {type === 'full'
                   ? 'full workday — book each day separately'
-                  : 'hour(s)'}
+                  : 'in 30-minute steps'}
               </span>
             </div>
           </div>
