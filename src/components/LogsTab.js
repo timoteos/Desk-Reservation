@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ScrollText } from 'lucide-react';
 import { getLogs, getActivityTypes } from '../api/client';
+import { resourceLabel } from '../lib/resourceLabel';
 
 // Colour carries the kind of event so the trail can be skimmed: things that
 // grant a desk read green, things that take one away read red or grey.
@@ -126,7 +127,7 @@ export default function LogsTab({ dataVersion = 0 }) {
                       {actorLabel(log) !== log.subject && <>{log.subject} &middot; </>}
                       {log.date && formatDate(log.date)}
                       {log.startMin != null && <> &middot; {formatMinutes(log.startMin)} - {formatMinutes(log.endMin)}</>}
-                      {log.deskNumber != null && <> &middot; Desk# {log.deskNumber}</>}
+                      {log.deskNumber != null && <> &middot; {resourceLabel(log)}</>}
                     </p>
                   )}
 

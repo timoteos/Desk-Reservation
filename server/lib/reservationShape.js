@@ -32,6 +32,10 @@ const rowToReservation = (row) => ({
   userId: row.user_id,
   deskNumber: row.desk_number,
   deskId: row.desk_id,
+  // What to call it on screen. Sent by the API rather than rebuilt from the
+  // number, because "Desk# 13" is the wrong name for Conference Room 511A and
+  // only the database knows which is which.
+  deskLabel: row.desk_label ?? undefined,
   // Who is at the desk, and who answers for them. `external` is derived from
   // the role rather than stored on the booking, so a visitor cannot be one
   // thing here and another in the user list. The sponsor is stored, because it

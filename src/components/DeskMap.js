@@ -22,6 +22,24 @@ export const DESK_POSITIONS = {
   10: { left: '58.2%', top: '75%' },
   11: { left: '64.4%', top: '75%' },
   12: { left: '71%',   top: '75%' },
+
+  // Conference rooms. Same map, same coordinate space — they are rooms on this
+  // floor, not a separate diagram — but wider markers, because a room is
+  // labelled by name and "Conference Room 511A" will not fit in a desk square.
+  13: { left: '30.6%', top: '79%' },
+  14: { left: '91.2%', top: '24%' },
+};
+
+// The map is a diagram, so a marker carries a token rather than a sentence:
+// "4" for a desk, "511A" for a room. The full names — "Desk# 4", "Conference
+// Room 511A" — belong anywhere a screen names the space in prose, and come
+// through as `label`.
+//
+// Rooms get a little more width for four characters and the same height as a
+// desk, so the markers read as one system instead of two.
+export const MARKER_SIZE = {
+  desk: { width: '5.5%', height: '10%' },
+  room: { width: '8.5%', height: '10%' },
 };
 
 // Two ranges collide when each starts before the other ends.
@@ -105,13 +123,18 @@ export function DeskMapLegend({ showCurrent = false, live = false, className = '
   );
 }
 
-// `compact` shows bare numbers, for when the map is narrower than a page.
+// `canSelect` narrows what may be picked without hiding the rest. A conference
+// room on the front desk kiosk, or on an admin's screen while they are booking
+// for a visitor, still shows its live status — it just cannot be chosen. Hiding
+// it instead would leave somebody wondering where the rooms went, and answering
+// "is 511A free?" is most of what that screen is for.
 export default function DeskMap({
   desks,
   selectedDeskId = null,
   onSelect,
   loading = false,
-  compact = false,
+  canSelect = () => true,
+  unselectableHint = () => undefined,
 }) {
   return (
     <div className="relative">
@@ -133,11 +156,25 @@ export default function DeskMap({
         if (!position) return null;
 
         const isSelected = selectedDeskId != null && String(selectedDeskId) === String(desk.id);
+        const isRoom = desk.resourceType === 'room';
+        // A room is announced by its name. A desk keeps "Desk 4" rather than its
+        // "Desk# 4" label, because a screen reader reads the hash aloud as
+        // "number sign" — the same reason 'in_use' is spoken as "in use".
+        const accessibleName = isRoom ? desk.label : `Desk ${desk.number}`;
+        // What the marker itself shows. Falls back to the number so a caller
+        // that has not been updated to pass shortLabel still renders a desk
+        // correctly rather than an empty square.
+        const shortLabel = desk.shortLabel ?? String(desk.number);
         // 'partial' is shown but not offered: a recurring pattern needs a desk
         // free on every one of its days, so a desk that is nearly free is still
         // not usable. Only the booking flows produce 'partial'.
-        const clickable =
+        const freeToPick =
           desk.status === 'available' || desk.status === 'current' || desk.status === 'free';
+        const allowedHere = canSelect(desk);
+        const clickable = freeToPick && allowedHere;
+        // A room refused because of who it is for reads differently from one
+        // refused because somebody is in it, so say which.
+        const hint = allowedHere ? undefined : unselectableHint(desk);
 
         return (
           <button
@@ -145,27 +182,27 @@ export default function DeskMap({
             type="button"
             disabled={!clickable}
             onClick={() => clickable && onSelect?.(desk)}
-            aria-label={`Desk ${desk.number}, ${statusWords(desk.status)}`}
+            title={hint}
+            aria-label={`${accessibleName}, ${statusWords(desk.status)}${hint ? `. ${hint}` : ''}`}
             className={`absolute flex items-center justify-center rounded text-white font-bold
-              shadow-md transition select-none whitespace-nowrap overflow-hidden
+              shadow-md transition select-none overflow-hidden
               ${deskColor(desk.status, isSelected)}
               ${clickable ? 'cursor-pointer hover:brightness-110' : 'cursor-not-allowed'}`}
             style={{
               left: position.left,
               top: position.top,
               transform: 'translate(-50%, -50%)',
-              width: '5.5%',
-              height: '10%',
+              ...MARKER_SIZE[isRoom ? 'room' : 'desk'],
               fontSize: 'clamp(0.4rem, 1.1vw, 0.6rem)',
               padding: '0 4px',
+              whiteSpace: 'nowrap',
             }}
           >
-            {compact ? desk.number : (
-              <>
-                <span className="hidden sm:inline">{desk.label}</span>
-                <span className="sm:hidden">{desk.number}</span>
-              </>
-            )}
+            {/* One token at every breakpoint. The map used to shrink "Desk# 4"
+                to "4" only on small screens, which made a wide map read as a
+                paragraph of repeated words — the number was always the part
+                doing the work. */}
+            {shortLabel}
           </button>
         );
       })}

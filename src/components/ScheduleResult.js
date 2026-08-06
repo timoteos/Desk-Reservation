@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { CalendarCheck, CalendarX, CalendarOff } from 'lucide-react';
 import { cancelScheduleDay } from '../api/client';
 import { SCHEDULE_STATUS_LABELS, STATUS_STYLES, isLiveStatus } from '../lib/bookingStatus';
+import { resourceLabel } from '../lib/resourceLabel';
 
 const formatMinutes = (mins) => {
   const h = Math.floor(mins / 60);
@@ -83,7 +84,7 @@ export default function ScheduleResult({ schedule, onChanged }) {
 
       <div className="bg-surface-page border border-surface-line rounded-lg p-4 text-sm text-ink-body w-full flex flex-col gap-1">
         <p><span className="font-semibold text-mqd-title">Name:</span> {schedule.user}</p>
-        <p><span className="font-semibold text-mqd-title">Desk:</span> Desk# {schedule.deskNumber ?? '—'}</p>
+        <p><span className="font-semibold text-mqd-title">Desk:</span> {resourceLabel(schedule)}</p>
 
         {lines.map((l) => (
           <p key={l.days}>

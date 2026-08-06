@@ -11,8 +11,14 @@ const { expirePending, expiryFor } = require('../lib/expirePending');
 const { recordActivity } = require('../lib/activityLog');
 const { tooSoonError, officeHoursError, workingDayError } = require('../lib/officeHours');
 const { checkInByCode, releaseNoShows } = require('../lib/checkIn');
-const { bookableDeskError } = require('../lib/deskGuard');
+const {
+  findAvailableResource, bookingRoleError, activeResourceById,
+  resourceTypeFromRequest, RESOURCE_TYPES,
+} = require('../lib/resources');
+
 const { endSeries } = require('../lib/endSeries');
+
+const BAD_RESOURCE_TYPE = `resourceType must be one of ${RESOURCE_TYPES.join(', ')}.`;
 
 const router = express.Router();
 
@@ -29,7 +35,7 @@ const SELECT_RESERVATION = `
          u.first_name, u.last_name, u.organization,
          ur.role_type,
          sp.first_name AS sponsor_first_name, sp.last_name AS sponsor_last_name,
-         d.desk_number
+         d.desk_number, coalesce(d.display_name, 'Desk# ' || d.desk_number) AS desk_label
     FROM reservations r
     JOIN users u ON u.user_id = r.user_id
     JOIN roles ur ON ur.role_id = u.role_id
@@ -111,13 +117,17 @@ router.get('/', async (req, res, next) => {
     }
 
     res.json(
-      reservations.map(({ id, date: d, startMin: s, endMin: e, deskNumber, deskId }) => ({
+      reservations.map(({ id, date: d, startMin: s, endMin: e, deskNumber, deskId, deskLabel }) => ({
         id,
         date: d,
         startMin: s,
         endMin: e,
         deskNumber,
         deskId,
+        // Not identifying — it is the name of a space, the same public fact as
+        // the number beside it, and the calendar needs it to say "Conference
+        // Room 511A" rather than "Desk# 13".
+        deskLabel,
       }))
     );
   } catch (err) {
@@ -155,6 +165,8 @@ async function scheduleByCode(code) {
             min(s.status) FILTER (WHERE s.status <> 'canceled')       AS status,
             coalesce(min(d.desk_number) FILTER (WHERE s.status <> 'canceled'),
                      min(d.desk_number))                              AS desk_number,
+            coalesce(min(d.display_name) FILTER (WHERE s.status <> 'canceled'),
+                     min(d.display_name))                             AS display_name,
             min(s.active_from) FILTER (WHERE s.status <> 'canceled')  AS active_from,
             max(s.active_until) FILTER (WHERE s.status <> 'canceled') AS active_until,
             bool_or(s.active_until IS NULL) FILTER (WHERE s.status <> 'canceled') AS open_ended,
@@ -207,6 +219,7 @@ async function scheduleByCode(code) {
     confirmationCode: row.series_code,
     user: `${row.first_name} ${row.last_name}`,
     deskNumber: row.desk_number,
+    deskLabel: row.display_name ?? (row.desk_number != null ? `Desk# ${row.desk_number}` : undefined),
     // No live rows left means the whole arrangement is over, which is the one
     // case where the filtered aggregate is null.
     status: row.status ?? 'canceled',
@@ -283,6 +296,9 @@ router.post('/code/:code/check-in', async (req, res, next) => {
     res.json({
       name: `${booking.first_name} ${booking.last_name}`,
       deskNumber: booking.desk_number,
+      // Without the name the kiosk rebuilt one from the number and greeted
+      // somebody checking into Conference Room 511B with "Desk# 14".
+      deskLabel: booking.desk_label,
       startMin: toMinutes(booking.starts_at),
       endMin: toMinutes(booking.ends_at),
       reclaimed,
@@ -421,19 +437,55 @@ router.post('/', async (req, res, next) => {
     }
 
     // Until DHS SSO is in place, the booker identifies themselves by email.
+    //
+    // The role comes back with them, because what may be booked depends on it:
+    // a conference room is staff-only. Read from the database rather than from
+    // the request, for the obvious reason.
     let resolvedUserId = userId;
-    if (!resolvedUserId) {
+    let bookerRole = null;
+    {
       const { rows } = await query(
-        'SELECT user_id FROM users WHERE lower(email) = lower($1) AND is_active',
-        [email.trim()]
+        `SELECT u.user_id, r.role_type
+           FROM users u JOIN roles r ON r.role_id = u.role_id
+          WHERE ${resolvedUserId ? 'u.user_id = $1' : 'lower(u.email) = lower($1)'}
+            AND u.is_active`,
+        [resolvedUserId ?? email.trim()]
       );
       if (rows.length === 0) {
         return res.status(404).json({
-          message: `No account found for ${email.trim()}. Check the address or contact your administrator.`,
+          message: resolvedUserId
+            ? 'That account no longer exists.'
+            : `No account found for ${email.trim()}. Check the address or contact your administrator.`,
         });
       }
       resolvedUserId = rows[0].user_id;
+      bookerRole = rows[0].role_type;
     }
+
+    // What is being booked. When a specific resource is named the type comes
+    // from that row, not from the request — a caller that said "desk" while
+    // passing a room's id would otherwise choose which rules it is judged by.
+    // Only the "anything free" case has to be told, and there it defaults to a
+    // desk so callers written before rooms existed are unaffected.
+    let resourceType;
+    let namedResource = null;
+    if (deskId != null) {
+      namedResource = await activeResourceById(deskId);
+      if (!namedResource) {
+        return res.status(400).json({
+          message: 'That space is not available — it may have been taken out of service.',
+        });
+      }
+      resourceType = namedResource.resource_type;
+    } else {
+      resourceType = resourceTypeFromRequest(req.body.resourceType);
+      if (!resourceType) {
+        return res.status(400).json({ message: BAD_RESOURCE_TYPE });
+      }
+    }
+
+    const roleProblem = bookingRoleError(resourceType, bookerRole);
+    if (roleProblem) return res.status(403).json({ message: roleProblem });
 
     // Office hours are enforced here, not only in the interface. A request that
     // never touched the calendar must not be able to book the office at 3am,
@@ -452,35 +504,17 @@ router.post('/', async (req, res, next) => {
     const timingProblem = tooSoonError(startsAt);
     if (timingProblem) return res.status(400).json({ message: timingProblem });
 
-    if (deskId != null) {
-      const deskProblem = await bookableDeskError(deskId);
-      if (deskProblem) return res.status(400).json({ message: deskProblem });
-    }
-
-    // No desk chosen: pick one at random from those free for this window.
-    // Random rather than lowest-numbered so bookings spread across the office
-    // instead of piling onto Desk# 1.
+    // Nothing named: pick something free of the requested type for this window.
     let resolvedDeskId = deskId;
     if (!resolvedDeskId) {
-      const { rows } = await query(
-        `SELECT desk_id FROM desks d
-          WHERE d.is_active
-            AND NOT EXISTS (
-              SELECT 1 FROM reservations r
-               WHERE r.desk_id = d.desk_id
-                 AND r.status IN ('pending', 'approved')
-                 AND tsrange(r.starts_at, r.ends_at) && tsrange($1, $2)
-            )
-          ORDER BY random()
-          LIMIT 1`,
-        [startsAt, endsAt]
-      );
-      if (rows.length === 0) {
+      resolvedDeskId = await findAvailableResource(resourceType, startsAt, endsAt);
+      if (!resolvedDeskId) {
         return res.status(409).json({
-          message: 'Every desk is booked for that time. Try a different slot.',
+          message: resourceType === 'room'
+            ? 'Both conference rooms are booked for that time. Try a different slot.'
+            : 'Every desk is booked for that time. Try a different slot.',
         });
       }
-      resolvedDeskId = rows[0].desk_id;
     }
 
     const inserted = await query(
@@ -508,7 +542,7 @@ router.post('/', async (req, res, next) => {
       activityType: 'created',
       reservationId: inserted.rows[0].reservation_id,
       actorUserId: resolvedUserId,
-      description: `${booking.user} requested Desk# ${booking.deskNumber}`,
+      description: `${booking.user} requested ${booking.deskLabel ?? `Desk# ${booking.deskNumber}`}`,
     });
 
     res.status(201).json(booking);
@@ -517,7 +551,7 @@ router.post('/', async (req, res, next) => {
     // something the UI can show rather than a 500.
     if (err.constraint === 'no_double_booking') {
       return res.status(409).json({
-        message: 'That desk is already reserved for part of this time range.',
+        message: 'That space is already reserved for part of this time range.',
       });
     }
     if (err.constraint === 'ends_after_start') {

@@ -11,6 +11,7 @@ import {
   isWorkingDay,
   earliestStartOn,
 } from '../lib/officeHours';
+import { resourceLabel } from '../lib/resourceLabel';
 
 const todayValue = () => {
   const d = new Date();
@@ -44,6 +45,11 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
       OFFICE_END
     ));
   const [deskId, setDeskId] = useState(null);
+  // What "any free one" should mean when nothing on the map is picked. It used
+  // to be implicit — no selection meant a desk — which stopped working the
+  // moment the map had two kinds on it. Asked explicitly instead, and only when
+  // it is actually load-bearing.
+  const [anyType, setAnyType] = useState('desk');
 
   const [desks, setDesks] = useState([]);
   const [loadingDesks, setLoadingDesks] = useState(true);
@@ -71,7 +77,7 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
     let cancelled = false;
     setLoadingDesks(true);
 
-    Promise.all([getDesks(), getReservationsForDate(date)])
+    Promise.all([getDesks('all'), getReservationsForDate(date)])
       .then(([deskList, reservations]) => {
         if (cancelled) return;
         const withStatus = deskStatuses(deskList, reservations, start, end);
@@ -103,6 +109,11 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
     (who === 'staff' ? Boolean(userId) : Boolean(guestReady)) &&
     date && !closedDay && !windowPassed && !submitting;
   const selectedDesk = desks.find((d) => String(d.id) === String(deskId));
+  // What the dialog is about, which follows whatever has actually been picked
+  // rather than a mode the admin had to choose first.
+  const noun = selectedDesk?.resourceType === 'room'
+    ? 'conference room'
+    : (selectedDesk ? 'desk' : (anyType === 'room' ? 'conference room' : 'desk'));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -127,6 +138,9 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
         endMin: end,
         // Omitted rather than null, so the server assigns one.
         ...(deskId != null ? { deskId: Number(deskId) } : {}),
+        // Only consulted when no specific space was named — with an id the
+        // server reads the type off the row instead of trusting this.
+        resourceType: anyType,
       });
       setResult(booking);
       onBooked?.();
@@ -161,7 +175,7 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
           <X className="w-5 h-5" />
         </button>
 
-        <h2 className="text-mqd-title text-xl font-bold mb-1">Book a desk</h2>
+        <h2 className="text-mqd-title text-xl font-bold mb-1">Book a desk or room</h2>
         <p className="text-ink-muted text-sm mb-5">
           {result
             ? 'Booked and approved.'
@@ -172,7 +186,7 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
           <div className="flex flex-col items-center gap-3 text-center py-2">
             <CheckCircle2 className="w-10 h-10 text-mqd-title" />
             <p className="text-ink-body text-sm">
-              Desk# {result.deskNumber}{bookedFor ? ` for ${bookedFor}` : ''}
+              {resourceLabel(result)}{bookedFor ? ` for ${bookedFor}` : ''}
             </p>
             <div className="bg-mqd-btn/10 border border-mqd-btn/20 rounded-lg px-6 py-4 w-full">
               <p className="text-ink-muted text-xs uppercase tracking-wide mb-1">Confirmation code</p>
@@ -200,7 +214,22 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
                   <button
                     key={o.key}
                     type="button"
-                    onClick={() => { setWho(o.key); setError(null); }}
+                    onClick={() => {
+                      setWho(o.key);
+                      setError(null);
+                      // A visitor cannot hold a conference room, so a room
+                      // already picked stops being a valid choice the moment the
+                      // booking becomes a visitor's. Dropped here rather than
+                      // left to fail on submit; the map greys the rooms out at
+                      // the same time, which says why.
+                      if (o.key === 'visitor') {
+                        setDeskId((current) => {
+                          const picked = desks.find((d) => String(d.id) === String(current));
+                          return picked?.resourceType === 'room' ? null : current;
+                        });
+                        setAnyType('desk');
+                      }
+                    }}
                     aria-pressed={who === o.key}
                     className={`flex-1 text-sm font-medium px-3 py-2 rounded-lg border transition
                       ${who === o.key
@@ -343,25 +372,73 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
 
             <div>
               <p className="text-ink-body font-medium text-sm mb-2">
-                Pick a desk for {formatMinutes(start)} – {formatMinutes(end)}
+                Pick a desk or room for {formatMinutes(start)} – {formatMinutes(end)}
                 <span className="text-ink-muted font-normal"> — optional</span>
               </p>
               <DeskMap
                 desks={desks}
                 selectedDeskId={deskId}
+                // Booking for a visitor greys the rooms out rather than hiding
+                // them, so the reason is visible where the choice is made.
+                canSelect={(desk) => who === 'staff' || desk.resourceType !== 'room'}
+                unselectableHint={() => 'Conference rooms can only be booked for MQD staff.'}
                 // Clicking the chosen desk again clears it, so going back to
                 // "any free desk" doesn't mean closing the dialog and starting over.
                 onSelect={(desk) =>
                   setDeskId((current) => (String(current) === String(desk.id) ? null : desk.id))
                 }
                 loading={loadingDesks}
-                compact
               />
               <div className="flex items-center justify-between gap-3 mt-2 flex-wrap">
                 <DeskMapLegend />
-                <p className="text-sm text-ink-body">
-                  {selectedDesk ? `Selected: Desk# ${selectedDesk.number}` : 'Any free desk'}
-                </p>
+                {selectedDesk ? (
+                  <p className="text-sm text-ink-body">
+                    Selected:{' '}
+                    <span className="font-semibold text-mqd-title">
+                      {resourceLabel(selectedDesk)}
+                    </span>
+                    {selectedDesk.capacity != null && ` · seats ${selectedDesk.capacity}`}
+                  </p>
+                ) : (
+                  // Only asked when it matters. With something picked on the map
+                  // this question has an answer already, and showing it anyway
+                  // would invite an admin to contradict their own choice.
+                  <div className="flex items-center gap-2 text-sm text-ink-body">
+                    <span className="text-ink-muted">No preference:</span>
+                    <div role="radiogroup" aria-label="What to assign" className="flex gap-1">
+                      {[
+                        { key: 'desk', label: 'Any free desk' },
+                        { key: 'room', label: 'Any free room' },
+                      ].map((o) => {
+                        // A visitor cannot be given a room, so the option is not
+                        // offered while booking for one.
+                        const blocked = o.key === 'room' && who !== 'staff';
+                        return (
+                          <label
+                            key={o.key}
+                            title={blocked ? 'Conference rooms can only be booked for MQD staff.' : undefined}
+                            className={`px-2.5 py-1 rounded-md border text-xs font-medium transition
+                              ${anyType === o.key && !blocked
+                                ? 'bg-mqd-btn text-white border-mqd-btn'
+                                : 'border-surface-line text-ink-body hover:bg-surface-panel'}
+                              ${blocked ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                          >
+                            <input
+                              type="radio"
+                              name="any-type"
+                              value={o.key}
+                              disabled={blocked}
+                              checked={anyType === o.key && !blocked}
+                              onChange={() => setAnyType(o.key)}
+                              className="sr-only"
+                            />
+                            {o.label}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -379,8 +456,8 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
               {submitting
                 ? 'Booking…'
                 : selectedDesk
-                  ? `Book Desk# ${selectedDesk.number}`
-                  : 'Book any free desk'}
+                  ? `Book ${resourceLabel(selectedDesk)}`
+                  : `Book any free ${noun}`}
             </button>
           </form>
         )}

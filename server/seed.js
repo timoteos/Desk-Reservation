@@ -158,6 +158,28 @@ async function seed() {
   }
   console.log('Inserted 12 desks');
 
+  // Rooms carry numbers of their own so desk_number stays NOT NULL UNIQUE and
+  // every existing lookup, route and join keeps working untouched. What people
+  // see is the name.
+  // Both are on the floor plan already — 511A is the enclosed room on the lower
+  // left, 511B the one with the oval table in the upper right. Their positions
+  // live with the desk positions in src/components/DeskMap.js.
+  //
+  // Seat counts come from the office, not from counting chairs on the plan.
+  const ROOMS = [
+    { number: 13, name: 'Conference Room 511A', short: '511A', capacity: 10 },
+    { number: 14, name: 'Conference Room 511B', short: '511B', capacity: 8 },
+  ];
+  for (const room of ROOMS) {
+    const { rows } = await query(
+      `INSERT INTO desks (desk_number, resource_type, display_name, short_name, capacity)
+       VALUES ($1, 'room', $2, $3, $4) RETURNING desk_id`,
+      [room.number, room.name, room.short, room.capacity]
+    );
+    deskIds[room.number] = rows[0].desk_id;
+  }
+  console.log(`Inserted ${ROOMS.length} conference rooms`);
+
   for (const r of RESERVATIONS) {
     const base = dayOffset(r.dayOffset);
     await query(

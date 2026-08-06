@@ -20,7 +20,7 @@ router.get('/', async (req, res, next) => {
               a.activity_type, a.label,
               actor.first_name AS actor_first, actor.last_name AS actor_last,
               subject.first_name AS subject_first, subject.last_name AS subject_last,
-              d.desk_number, r.starts_at, r.ends_at, r.confirmation_code
+              d.desk_number, coalesce(d.display_name, 'Desk# ' || d.desk_number) AS desk_label, r.starts_at, r.ends_at, r.confirmation_code
          FROM logs l
          JOIN activities a ON a.activity_id = l.activity_id
          LEFT JOIN users actor ON actor.user_id = l.actor_user_id
@@ -43,6 +43,9 @@ router.get('/', async (req, res, next) => {
         actor: row.actor_first ? `${row.actor_first} ${row.actor_last}` : null,
         subject: row.subject_first ? `${row.subject_first} ${row.subject_last}` : null,
         deskNumber: row.desk_number,
+        // The name, not just the number. Without this the log rebuilt a label
+        // from the number and called Conference Room 511A "Desk# 13".
+        deskLabel: row.desk_label ?? undefined,
         startMin: row.starts_at ? row.starts_at.getHours() * 60 + row.starts_at.getMinutes() : null,
         endMin: row.ends_at ? row.ends_at.getHours() * 60 + row.ends_at.getMinutes() : null,
         date: row.starts_at

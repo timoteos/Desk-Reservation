@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Check } from 'lucide-react';
 import DeskMap, { DeskMapLegend, deskStatuses } from './DeskMap';
 import { getDesks, getReservationsForDate, adminEditReservation } from '../api/client';
+import { resourceLabel } from '../lib/resourceLabel';
 
 import {
   OFFICE_START,
@@ -129,7 +130,7 @@ export default function EditReservationModal({ reservation, onClose, onSaved }) 
 
         {/* What it is now, so it's clear what's being changed from. */}
         <p className="text-ink-body text-sm bg-surface-page border border-surface-line rounded-lg px-3 py-2 mb-4">
-          Currently {formatDate(reservation.date)} &middot; Desk# {reservation.deskNumber} &middot;{' '}
+          Currently {formatDate(reservation.date)} &middot; {resourceLabel(reservation)} &middot;{' '}
           {formatMinutes(reservation.startMin)} – {formatMinutes(reservation.endMin)}
         </p>
 
@@ -200,13 +201,12 @@ export default function EditReservationModal({ reservation, onClose, onSaved }) 
           selectedDeskId={deskId}
           onSelect={(desk) => setDeskId(desk.id)}
           loading={loadingDesks}
-          compact
         />
 
         <div className="flex items-center justify-between gap-3 mt-3 flex-wrap">
           <DeskMapLegend showCurrent />
           <p className="text-sm text-ink-body">
-            {selectedDesk ? `Selected: Desk# ${selectedDesk.number}` : 'No desk selected'}
+            {selectedDesk ? `Selected: ${resourceLabel(selectedDesk)}` : 'No desk selected'}
           </p>
         </div>
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getScheduleDays, adminCancelReservation } from '../api/client';
+import { resourceLabel } from '../lib/resourceLabel';
 
 const formatMinutes = (mins) => {
   const h = Math.floor(mins / 60);
@@ -86,7 +87,7 @@ export default function ScheduleDays({ seriesId, deskNumber, onChanged }) {
                 <span className="text-ink-body text-sm">{dayLabel(day.date)}</span>
                 <span className="text-ink-muted text-sm">
                   {' · '}{formatMinutes(day.startMin)} – {formatMinutes(day.endMin)}
-                  {' · '}Desk# {day.deskNumber ?? deskNumber ?? '—'}
+                  {' · '}{resourceLabel(day.deskNumber != null ? day : { deskNumber })}
                 </span>
               </div>
 

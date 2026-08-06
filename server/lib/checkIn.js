@@ -116,7 +116,7 @@ async function checkInByCode(code) {
     // for the whole arrangement and today's occurrence is the row that matters.
     const { rows } = await client.query(
       `SELECT r.reservation_id, r.starts_at, r.ends_at, r.status, r.checked_in_at,
-              u.first_name, u.last_name, d.desk_number
+              u.first_name, u.last_name, d.desk_number, coalesce(d.display_name, 'Desk# ' || d.desk_number) AS desk_label
          FROM reservations r
          JOIN users u ON u.user_id = r.user_id
          JOIN desks d ON d.desk_id = r.desk_id
@@ -157,7 +157,7 @@ async function checkInByCode(code) {
         return {
           ok: false,
           code: 'taken',
-          message: `Desk# ${booking.desk_number} was given to somebody else after the booking was released. Ask the front desk for another.`,
+          message: `${booking.desk_label} was given to somebody else after the booking was released. Ask the front desk for another.`,
           booking,
         };
       }
@@ -169,8 +169,8 @@ async function checkInByCode(code) {
       activityType: 'checked_in',
       reservationId: booking.reservation_id,
       description: reclaimed
-        ? `Checked in at Desk# ${booking.desk_number}, reclaiming a released booking`
-        : `Checked in at Desk# ${booking.desk_number}`,
+        ? `Checked in at ${booking.desk_label}, reclaiming a released booking`
+        : `Checked in at ${booking.desk_label}`,
       metadata: reclaimed ? { reclaimed: true } : null,
     }, client);
 

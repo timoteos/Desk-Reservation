@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { CalendarX, Search, Pencil } from 'lucide-react';
 import { getAllReservations, adminCancelReservation } from '../api/client';
 import EditReservationModal from './EditReservationModal';
+import { resourceLabel } from '../lib/resourceLabel';
 
 // Ongoing first, because it is the only one that answers "right now" — and the
 // state that had nowhere to live before, since Upcoming meant "not finished"
@@ -83,7 +84,7 @@ function BookingCard({ r, confirmingId, setConfirmingId, busyId, onCancel, onEdi
             <p className="text-ink-muted text-sm mt-0.5">
               {formatDate(r.date)} &middot;{' '}
               {formatMinutes(r.startMin)} - {formatMinutes(r.endMin)} &middot;{' '}
-              Desk# {r.deskNumber}
+              {resourceLabel(r)}
             </p>
             <p className="font-mono text-xs text-ink-muted mt-1 select-all">Confirmation Code: {r.confirmationCode}</p>
           </div>
@@ -188,7 +189,10 @@ export default function ReservationsTab({ dataVersion = 0, onChanged }) {
   const term = filter.trim().toLowerCase();
   const matching = term
     ? reservations.filter((r) =>
-        [r.user, `desk# ${r.deskNumber}`, r.confirmationCode]
+        // The name as well as the number, so searching "511A" or "Conference"
+        // finds a room booking. Matching only "desk# 13" meant the one term
+        // anybody would actually type returned nothing.
+        [r.user, resourceLabel(r), `desk# ${r.deskNumber}`, r.confirmationCode]
           .filter(Boolean)
           .some((field) => String(field).toLowerCase().includes(term))
       )

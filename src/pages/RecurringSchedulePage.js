@@ -12,6 +12,7 @@ import {
   toTimeValue,
   timeOptions,
 } from '../lib/officeHours';
+import { resourceLabel } from '../lib/resourceLabel';
 
 const CRUMBS = [
   { label: 'Landing', path: '/' },
@@ -199,7 +200,7 @@ export default function RecurringSchedulePage() {
               <CheckCircle2 className="w-10 h-10 text-mqd-title" />
               <p className="text-mqd-title font-semibold">Request submitted</p>
               <p className="text-ink-body text-sm">
-                Desk# {result.deskNumber} &middot; {result.created} booking
+                {resourceLabel(result)} &middot; {result.created} booking
                 {result.created === 1 ? '' : 's'} through {formatDay(result.generatedThrough)},
                 pending approval
               </p>
@@ -391,7 +392,7 @@ export default function RecurringSchedulePage() {
                     desks={(availability?.desks ?? []).map((d) => ({
                       id: d.deskId,
                       number: d.deskNumber,
-                      label: `Desk# ${d.deskNumber}`,
+                      label: resourceLabel(d),
                       // Partial is shown but not offered. A schedule covers every
                       // day or none — the desk is the holder's for the duration,
                       // which cannot be true if someone else has it on the third
@@ -410,7 +411,6 @@ export default function RecurringSchedulePage() {
                       setDeskId((current) => (current === desk.id ? null : desk.id))
                     }
                     loading={loadingDesks}
-                    compact
                   />
 
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-body mt-2">
@@ -435,7 +435,7 @@ export default function RecurringSchedulePage() {
                         }
                         return 'No desk chosen — one that fits the whole pattern will be assigned.';
                       }
-                      return `Desk# ${chosen.deskNumber} — free for all ${chosen.occurrences} days.`;
+                      return `${resourceLabel(chosen)} — free for all ${chosen.occurrences} days.`;
                     })()}
                   </p>
                 </div>

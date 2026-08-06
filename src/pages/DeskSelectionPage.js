@@ -5,6 +5,7 @@ import Breadcrumb from '../components/Breadcrumb';
 import BackLink from '../components/BackLink';
 import DeskMap, { DeskMapLegend, deskStatuses } from '../components/DeskMap';
 import { getDesks, getReservationsForDate } from '../api/client';
+import { resourceLabel } from '../lib/resourceLabel';
 import {
   OFFICE_START,
   OFFICE_END,
@@ -47,6 +48,10 @@ export default function DeskSelectionPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [selectedDesk, setSelectedDesk] = useState(null);
+  // One floor, one map: desks and conference rooms together, because that is
+  // what the office is. The marker tells them apart — "511A" does not read as a
+  // desk beside "1" — and the rules that differ are enforced where they apply
+  // rather than by hiding half the plan behind a mode.
   const [desks, setDesks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -101,6 +106,9 @@ export default function DeskSelectionPage() {
       return params;
     }, { replace: true });
 
+  // The space currently picked, for the summary beside the legend.
+  const chosen = desks.find((d) => String(d.id) === String(selectedDesk));
+
   const closedDay = !isWorkingDay(dateStr);
 
   // What is still bookable today. Without this the page would offer a window
@@ -109,6 +117,8 @@ export default function DeskSelectionPage() {
   const earliest = earliestStartOn(dateStr);
   const dayOver = earliest > OFFICE_END - SLOT_MINUTES;
   const windowPassed = !closedDay && startMin < earliest;
+  // Nothing on this day can be booked, so there is no plan worth drawing.
+  const unbookable = closedDay || windowPassed;
 
   // A desk is unavailable when an existing booking overlaps the chosen window,
   // so this refetches whenever the window moves — that is when the answer
@@ -127,7 +137,7 @@ export default function DeskSelectionPage() {
     setLoading(true);
     setError(null);
 
-    Promise.all([getDesks(), getReservationsForDate(dateStr)])
+    Promise.all([getDesks('all'), getReservationsForDate(dateStr)])
       .then(([deskList, reservations]) => {
         if (cancelled) return;
         const withStatus = deskStatuses(deskList, reservations, startMin, endMin);
@@ -154,10 +164,13 @@ export default function DeskSelectionPage() {
     <>
       <Breadcrumb crumbs={CRUMBS} />
 
-      <div className="flex-1 flex flex-col items-center px-8 py-6 gap-4 bg-surface-page">
-        {/* The window, editable in place. Changing it redraws the map below. */}
-        <div className="w-full max-w-5xl bg-white rounded-xl border border-surface-line px-6 py-4 opacity-0 animate-fade-up">
-          <div className="flex items-end justify-between gap-4 flex-wrap">
+      <div className="flex-1 flex flex-col items-center px-4 sm:px-8 py-6 gap-4 bg-surface-page">
+        {/* One card, because this is one interaction: the window decides what
+            the plan shows, and the plan is what the window is for. They were
+            three separate panels, which put the legend below the fold and gave
+            the same job three borders and three drop shadows. */}
+        <div className="w-full max-w-5xl bg-white rounded-xl border border-surface-line overflow-hidden opacity-0 animate-fade-up">
+          <div className="flex items-end justify-between gap-4 flex-wrap px-5 sm:px-6 py-4 border-b border-surface-line">
             <div>
               <h2 className="text-lg font-semibold text-mqd-title">{formatDate(dateStr)}</h2>
               <p className="text-ink-muted text-sm mt-0.5">
@@ -205,21 +218,52 @@ export default function DeskSelectionPage() {
               </label>
             </div>
           </div>
+
+          {/* A day with nothing to show says so where the plan would be, rather
+              than stacking a banner above an empty floor. */}
+          {unbookable ? (
+            <p className="px-5 sm:px-6 py-10 text-center text-sm text-ink-muted">
+              {closedDay
+                ? 'The office is closed that day. Pick a weekday to see the floor plan.'
+                : dayOver
+                  ? 'The office day has finished. Pick another date.'
+                  : `That time has already passed. The next bookable slot today is ${formatMinutes(earliest)}.`}
+            </p>
+          ) : (
+            <>
+              <div className="p-3 sm:p-4">
+                <DeskMap
+                  desks={desks}
+                  selectedDeskId={selectedDesk}
+                  onSelect={(desk) => setSelectedDesk(desk.id)}
+                  loading={loading}
+                />
+              </div>
+
+              {/* The legend sits with the map instead of in a panel below it,
+                  where it could not be read while looking at what it explains.
+                  What has been picked sits opposite, directly above the button
+                  it enables. */}
+              <div className="flex items-start justify-between gap-4 flex-wrap
+                              px-5 sm:px-6 py-3 border-t border-surface-line bg-surface-panel/40">
+                <DeskMapLegend />
+                <p className="text-sm text-ink-muted">
+                  {chosen ? (
+                    <>
+                      <span className="font-semibold text-mqd-title">{resourceLabel(chosen)}</span>
+                      {chosen.capacity != null && ` · seats ${chosen.capacity}`}
+                      {chosen.resourceType === 'room' && (
+                        <span className="block text-xs mt-0.5">
+                          Booked by MQD staff. A visitor attends as their guest.
+                        </span>
+                      )}
+                    </>
+                  ) : 'Nothing selected yet'}
+                </p>
+              </div>
+            </>
+          )}
         </div>
-
-        {closedDay && (
-          <div className="w-full max-w-5xl bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-6 py-4 text-sm">
-            The office is closed that day. Pick a weekday to see the floor plan.
-          </div>
-        )}
-
-        {!closedDay && windowPassed && (
-          <div className="w-full max-w-5xl bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-6 py-4 text-sm">
-            {dayOver
-              ? 'The office day has finished. Pick another date.'
-              : `That time has already passed. The next bookable slot today is ${formatMinutes(earliest)}.`}
-          </div>
-        )}
 
         {error && (
           <div className="w-full max-w-5xl bg-red-50 border border-red-200 text-red-700 rounded-xl px-6 py-4 text-sm">
@@ -227,25 +271,9 @@ export default function DeskSelectionPage() {
           </div>
         )}
 
-        {/* Floor plan with overlaid desks */}
-        <div className="w-full max-w-5xl bg-white rounded-xl border border-surface-line p-3 opacity-0 animate-fade-up" style={{ animationDelay: '100ms' }}>
-        <DeskMap
-          desks={desks}
-          selectedDeskId={selectedDesk}
-          onSelect={(desk) => setSelectedDesk(desk.id)}
-          loading={loading}
-        />
-        </div>
-
-        {/* Legend */}
-        <div className="w-full max-w-5xl bg-white border border-surface-line rounded-xl p-4 text-xs text-ink-body self-start opacity-0 animate-fade-up" style={{ animationDelay: '200ms' }}>
-          <p className="font-semibold mb-2 text-mqd-title">Map Legend:</p>
-          <DeskMapLegend />
-        </div>
-
         {/* Back and Next as a pair. Duration is derivable, and reaching this
             page means a desk was being chosen, so the calendar restores exactly. */}
-        <div className="w-full max-w-5xl flex items-center justify-between gap-4 opacity-0 animate-fade-up" style={{ animationDelay: '300ms' }}>
+        <div className="w-full max-w-5xl flex items-center justify-between gap-4 opacity-0 animate-fade-up" style={{ animationDelay: '150ms' }}>
           <BackLink
             to={`/calendar?startDate=${dateStr}&duration=${endMin - startMin}`
               + `&type=${searchParams.get('type') || 'hourly'}&deskChoice=pick`}

@@ -25,7 +25,7 @@ beforeEach(() => {
 
 test('it counts what is actually free, not what is merely unbooked', async () => {
   render(<LiveFloor />);
-  expect(await screen.findByText('2 of 4 desks free right now')).toBeInTheDocument();
+  expect(await screen.findByText('2 of 4 desks free')).toBeInTheDocument();
 });
 
 test('a free desk can be taken; one in use cannot', async () => {
@@ -331,4 +331,60 @@ test('it re-reads on demand, so a check-in elsewhere is reflected at once', asyn
   rerender(<LiveFloor refreshKey={1} />);
 
   await waitFor(() => expect(api.getDeskStatus.mock.calls.length).toBeGreaterThan(before));
+});
+
+// One floor, one map. Rooms are here so somebody can answer "is 511A free?"
+// without touching anything — but a room is booked in advance, not taken at
+// the desk, so it must not open the claim form.
+describe('conference rooms on the kiosk', () => {
+  const WITH_ROOMS = {
+    nowMin: 700,
+    desks: [
+      ...FLOOR.desks,
+      { id: '18', number: 13, label: 'Conference Room 511A', shortLabel: '511A',
+        resourceType: 'room', capacity: 10, status: 'free', freeUntilMin: 1020 },
+      { id: '19', number: 14, label: 'Conference Room 511B', shortLabel: '511B',
+        resourceType: 'room', capacity: 8, status: 'in_use', untilMin: 900 },
+    ],
+  };
+
+  beforeEach(() => { api.getDeskStatus.mockResolvedValue(WITH_ROOMS); });
+
+  it('counts desks and rooms separately, so neither number misleads', async () => {
+    render(<LiveFloor />);
+    expect(await screen.findByText(/2 of 4 desks free/)).toBeInTheDocument();
+    expect(screen.getByText(/1 of 2 rooms/)).toBeInTheDocument();
+  });
+
+  it('shows a room with its live status but will not let it be taken', async () => {
+    render(<LiveFloor />);
+    await screen.findByText(/2 of 4 desks free/);
+
+    expect(screen.getByLabelText(/Conference Room 511A, free/)).toBeDisabled();
+    expect(screen.getByLabelText(/Conference Room 511B, in use/)).toBeDisabled();
+    expect(screen.getByLabelText('Desk 4, free')).toBeEnabled();
+  });
+
+  it('says why a room cannot be taken rather than just greying it out', async () => {
+    render(<LiveFloor />);
+    await screen.findByText(/2 of 4 desks free/);
+
+    // Every room carries the reason, and no desk does.
+    expect(screen.getAllByLabelText(/Booked from the Reservations page/)).toHaveLength(2);
+    expect(screen.getByLabelText('Desk 4, free')).toBeInTheDocument();
+  });
+
+  it('does not open the claim form when a room is tapped', async () => {
+    render(<LiveFloor />);
+    await screen.findByText(/2 of 4 desks free/);
+
+    fireEvent.click(screen.getByLabelText(/Conference Room 511A, free/));
+    expect(screen.queryByLabelText(/your email address/i)).not.toBeInTheDocument();
+  });
+
+  it('asks for the whole floor, not one type', async () => {
+    render(<LiveFloor />);
+    await screen.findByText(/2 of 4 desks free/);
+    expect(api.getDeskStatus).toHaveBeenCalledWith('all');
+  });
 });

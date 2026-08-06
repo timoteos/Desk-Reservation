@@ -3,6 +3,7 @@ import { CalendarClock, Search, AlertTriangle, Pencil } from 'lucide-react';
 import { getSchedules, adminCancelSeries } from '../api/client';
 import EditScheduleModal from './EditScheduleModal';
 import ScheduleDays from './ScheduleDays';
+import { resourceLabel } from '../lib/resourceLabel';
 
 // A schedule's state is not a tense, so this is not the Reservations tab's
 // Upcoming/Past/All. An arrangement running August to October is neither
@@ -134,7 +135,7 @@ export default function SchedulesTab({ dataVersion = 0, onChanged }) {
 
   const handleSaved = async (schedule, result) => {
     setNotice(
-      `${schedule.name}'s schedule updated — Desk# ${result.deskNumber}, `
+      `${schedule.name}'s schedule updated — ${resourceLabel(result)}, `
       + `${result.regenerated} booking${result.regenerated === 1 ? '' : 's'} from today onward. `
       + (result.cappedAtCeiling
         ? `Capped at a year, so it runs to ${result.activeUntil}. `
@@ -153,7 +154,7 @@ export default function SchedulesTab({ dataVersion = 0, onChanged }) {
     .filter((s) => filter === 'all' || FILTER_MATCHES[filter].includes(s.state))
     .filter((s) =>
       !search ||
-      [s.name, s.email, `desk# ${s.deskNumber}`]
+      [s.name, s.email, resourceLabel(s), `desk# ${s.deskNumber}`]
         .filter(Boolean)
         .some((f) => String(f).toLowerCase().includes(search))
     );
@@ -261,7 +262,7 @@ export default function SchedulesTab({ dataVersion = 0, onChanged }) {
                     </div>
 
                     <p className="text-ink-muted text-sm mt-0.5">
-                      {describeDays(s.pattern)} &middot; Desk# {s.deskNumber ?? '—'}
+                      {describeDays(s.pattern)} &middot; {resourceLabel(s)}
                     </p>
                     <div className="text-ink-muted text-sm">
                       {describeHours(s.pattern).map((line) => <p key={line}>{line}</p>)}

@@ -10,6 +10,7 @@ import {
   toMinutes,
   timeOptions,
 } from '../lib/officeHours';
+import { resourceLabel } from '../lib/resourceLabel';
 
 const DAYS = [
   { key: 'mon', label: 'Mon', number: 1 },
@@ -291,13 +292,12 @@ export default function EditScheduleModal({ schedule, onClose, onSaved }) {
               desks={(availability?.desks ?? []).map((d) => ({
                 id: d.deskId,
                 number: d.deskNumber,
-                label: `Desk# ${d.deskNumber}`,
+                label: resourceLabel(d),
                 status: deskState(d),
               }))}
               selectedDeskId={deskId}
               onSelect={(desk) => setDeskId(desk.id)}
               loading={loadingDesks}
-              compact
             />
 
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-body mt-2">
@@ -315,8 +315,8 @@ export default function EditScheduleModal({ schedule, onClose, onSaved }) {
             <p className="text-ink-body text-sm mt-2">
               {chosen
                 ? chosenUsable
-                  ? `Desk# ${chosen.deskNumber} — free for all ${chosen.occurrences} days.`
-                  : `Desk# ${chosen.deskNumber} can't cover every day. Pick another.`
+                  ? `${resourceLabel(chosen)} — free for all ${chosen.occurrences} days.`
+                  : `${resourceLabel(chosen)} can't cover every day. Pick another.`
                 : 'Pick a desk.'}
             </p>
           </div>

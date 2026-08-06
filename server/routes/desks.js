@@ -8,24 +8,41 @@ const {
 const { releaseNoShows } = require('../lib/checkIn');
 const { recordActivity } = require('../lib/activityLog');
 const { guestDetailsError, resolveGuest } = require('../lib/guests');
+const {
+  LISTABLE_TYPES, listableTypeFromRequest,
+  listResources, labelFor, shortLabelFor, resourceByNumber,
+} = require('../lib/resources');
 
 const router = express.Router();
 
-// GET /api/desks
+// The one place a default for the resource type belongs: at the HTTP boundary,
+// stated once where it is visible, so callers written before rooms existed and
+// any bookmarked URL keep working unchanged. Everything inside the query layer
+// stays strict — see server/lib/resources.js.
+// These two endpoints are read-only, so 'all' is a legitimate answer here and
+// nowhere near a booking path.
+const typeFromQuery = (req) => listableTypeFromRequest(req.query.resource_type);
+
+const BAD_TYPE = `resource_type must be one of ${LISTABLE_TYPES.join(', ')}.`;
+
+// GET /api/desks?resource_type=desk|room
 router.get('/', async (req, res, next) => {
   try {
-    const result = await query(
-      `SELECT desk_id, desk_number, is_active
-         FROM desks
-        WHERE is_active
-        ORDER BY desk_number`
-    );
+    const resourceType = typeFromQuery(req);
+    if (!resourceType) return res.status(400).json({ message: BAD_TYPE });
+
+    const rows = await listResources(resourceType);
 
     res.json(
-      result.rows.map((row) => ({
+      rows.map((row) => ({
         id: String(row.desk_id),
         number: row.desk_number,
-        label: `Desk# ${row.desk_number}`,
+        // Full name for anywhere a sentence names it; short for the floor plan.
+        label: labelFor(row),
+        shortLabel: shortLabelFor(row),
+        resourceType: row.resource_type,
+        // Null for a desk, which seats one by construction.
+        capacity: row.capacity,
       }))
     );
   } catch (err) {
@@ -45,10 +62,14 @@ router.get('/', async (req, res, next) => {
 // it is the ceiling a walk-up claim gets capped to.
 router.get('/status', async (req, res, next) => {
   try {
+    const resourceType = typeFromQuery(req);
+    if (!resourceType) return res.status(400).json({ message: BAD_TYPE });
+
     await releaseNoShows();
 
     const { rows } = await query(
-      `SELECT d.desk_id, d.desk_number,
+      `SELECT d.desk_id, d.desk_number, d.display_name, d.short_name,
+              d.resource_type, d.capacity,
               r.starts_at, r.ends_at, r.checked_in_at
          FROM desks d
     LEFT JOIN reservations r
@@ -61,8 +82,9 @@ router.get('/status', async (req, res, next) => {
           -- disagreed.
           AND r.status IN ('pending', 'approved')
           AND r.starts_at::date = current_date
-        WHERE d.is_active
-        ORDER BY d.desk_number, r.starts_at`
+        WHERE d.is_active AND ($1 = 'all' OR d.resource_type = $1)
+        ORDER BY d.resource_type = 'room', d.desk_number, r.starts_at`,
+      [resourceType]
     );
 
     const nowMin = minutesOf(new Date());
@@ -73,7 +95,10 @@ router.get('/status', async (req, res, next) => {
         byDesk.set(row.desk_id, {
           id: String(row.desk_id),
           number: row.desk_number,
-          label: `Desk# ${row.desk_number}`,
+          label: labelFor(row),
+          shortLabel: shortLabelFor(row),
+          resourceType: row.resource_type,
+          capacity: row.capacity,
           bookings: [],
         });
       }
@@ -168,16 +193,23 @@ router.post('/:number/claim', async (req, res, next) => {
       });
     }
 
-    const { rows: deskRows } = await client.query(
-      'SELECT desk_id FROM desks WHERE desk_number = $1 AND is_active',
-      [req.params.number]
-    );
-    if (deskRows.length === 0) {
+    // Desks only, by name rather than by silence.
+    //
+    // A room is refused here deliberately, not incidentally: whether a
+    // conference room can be taken with no approval, and who checks one in, are
+    // open questions with the PM. Until they are answered the safe default is
+    // to refuse — an allow-list, the same shape the check-in fix took after a
+    // deny-list let an unapproved request through.
+    const desk = await resourceByNumber('desk', req.params.number, client);
+    if (!desk) {
+      const room = await resourceByNumber('room', req.params.number, client);
       return res.status(400).json({
-        message: 'That desk is not available — it may have been taken out of service.',
+        message: room
+          ? `${labelFor(room)} cannot be taken at the front desk. Book a conference room from the Reservations page.`
+          : 'That desk is not available — it may have been taken out of service.',
       });
     }
-    const deskId = deskRows[0].desk_id;
+    const deskId = desk.desk_id;
 
     // Capped by whatever is booked next on this desk, so a claim is never
     // offered a window it would be thrown out of half way through.
@@ -259,8 +291,8 @@ router.post('/:number/claim', async (req, res, next) => {
       reservationId: rows[0].reservation_id,
       actorUserId: sponsorId,
       description: guest
-        ? `Desk# ${req.params.number} taken by an external visitor at the front desk`
-        : `Desk# ${req.params.number} claimed in person and checked in`,
+        ? `${labelFor(desk)} taken by an external visitor at the front desk`
+        : `${labelFor(desk)} claimed in person and checked in`,
       metadata: guest
         ? { walkUp: true, external: true, guestUserId: user.user_id,
             sponsoredByUserId: sponsorId, organization: user.organization ?? null }
@@ -275,6 +307,7 @@ router.post('/:number/claim', async (req, res, next) => {
       confirmationCode: rows[0].confirmation_code,
       name: `${user.first_name} ${user.last_name}`,
       deskNumber: Number(req.params.number),
+      deskLabel: labelFor(desk),
       startMin,
       endMin: finalEnd,
     });
