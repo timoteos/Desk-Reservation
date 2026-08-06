@@ -25,6 +25,7 @@
   "scripts": {
     "start": "react-scripts start",
     "server": "node server/index.js",
+    "dev:server": "node --watch server/index.js",
     "seed": "node server/seed.js",
     "seed:demo": "node server/seed.js --demo",
     "build": "react-scripts build",
@@ -34,8 +35,8 @@
     "test:server": "jest --config jest.server.config.js",
     "test:all": "react-scripts test --watchAll=false && jest --config jest.server.config.js",
     "eject": "react-scripts eject",
-    "lint": "eslint src --ext .js,.jsx",
-    "lint:fix": "eslint src --ext .js,.jsx --fix"
+    "lint": "eslint src server --ext .js,.jsx",
+    "lint:fix": "eslint src server --ext .js,.jsx --fix"
   },
   "eslintConfig": {
     "extends": [
