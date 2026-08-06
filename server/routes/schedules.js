@@ -7,7 +7,7 @@ const {
   DAY_NUMBERS,
   minutesToTime,
   planPattern,
-  deskAvailability,
+  resourceAvailability,
 } = require('../lib/recurringPattern');
 
 const router = express.Router();
@@ -62,6 +62,8 @@ router.get('/', async (req, res, next) => {
                        min(d.desk_number))                 AS desk_number,
               coalesce(min(d.desk_id) FILTER (WHERE s.status <> 'canceled'),
                        min(d.desk_id))                     AS desk_id,
+              coalesce(min(d.display_name) FILTER (WHERE s.status <> 'canceled'),
+                       min(d.display_name))                AS display_name,
               -- Cancelled rows are excluded here for the same reason as below: a
               -- weekday dropped by an edit is a cancelled row, and letting it into
               -- min() would report the whole arrangement as cancelled.
@@ -128,6 +130,7 @@ router.get('/', async (req, res, next) => {
         email: row.email,
         deskId: row.desk_id,
         deskNumber: row.desk_number,
+        deskLabel: row.display_name ?? (row.desk_number != null ? `Desk# ${row.desk_number}` : undefined),
         state: scheduleState(row, today),
         activeFrom: row.active_from ? toDateString(row.active_from) : null,
         activeUntil: row.open_ended || !row.active_until ? null : toDateString(row.active_until),
@@ -166,7 +169,7 @@ router.get('/', async (req, res, next) => {
 router.get('/:seriesId/days', async (req, res, next) => {
   try {
     const { rows } = await query(
-      `SELECT r.reservation_id, r.starts_at, r.ends_at, r.status, d.desk_number
+      `SELECT r.reservation_id, r.starts_at, r.ends_at, r.status, d.desk_number, coalesce(d.display_name, 'Desk# ' || d.desk_number) AS desk_label
          FROM reservations r
          JOIN recurring_schedules s ON s.schedule_id = r.schedule_id
          LEFT JOIN desks d ON d.desk_id = r.desk_id
@@ -185,6 +188,7 @@ router.get('/:seriesId/days', async (req, res, next) => {
         endMin: toMinutes(r.ends_at),
         status: r.status,
         deskNumber: r.desk_number,
+        deskLabel: r.desk_label ?? undefined,
       }))
     );
   } catch (err) {
@@ -279,7 +283,7 @@ router.patch('/:seriesId', async (req, res, next) => {
       [seriesId, req.user?.sub ?? null]
     );
 
-    const availability = await deskAvailability(client, plan.slots, {
+    const availability = await resourceAvailability(client, 'desk', plan.slots, {
       ignoreSeriesId: seriesId,
     });
     const target = availability.find((d) => d.deskId === nextDeskId);
@@ -292,7 +296,7 @@ router.patch('/:seriesId', async (req, res, next) => {
     if (target.conflicts > 0) {
       await client.query('ROLLBACK');
       return res.status(409).json({
-        message: `Desk# ${target.deskNumber} is already booked on ${target.conflicts} of the `
+        message: `${target.label} is already booked on ${target.conflicts} of the `
           + `${target.occurrences} days that change would cover, and a schedule has to cover `
           + 'every day. Nothing was changed.',
       });
@@ -385,6 +389,7 @@ router.patch('/:seriesId', async (req, res, next) => {
     res.json({
       seriesId: String(seriesId),
       deskNumber: target.deskNumber,
+      deskLabel: target.label,
       released,
       regenerated: plan.slots.length,
       activeUntil: storedUntil,

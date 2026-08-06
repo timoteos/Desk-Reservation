@@ -6,8 +6,13 @@ const { requireAdmin } = require('../lib/auth');
 const { recordActivity } = require('../lib/activityLog');
 const { endSeries } = require('../lib/endSeries');
 const { tooSoonError, officeHoursError, workingDayError } = require('../lib/officeHours');
-const { bookableDeskError } = require('../lib/deskGuard');
+const {
+  findAvailableResource, bookingRoleError,
+  activeResourceById, resourceTypeFromRequest, RESOURCE_TYPES, LABEL_SQL,
+} = require('../lib/resources');
 const { guestDetailsError, resolveGuest } = require('../lib/guests');
+
+const BAD_RESOURCE_TYPE = `resourceType must be one of ${RESOURCE_TYPES.join(', ')}.`;
 
 const router = express.Router();
 
@@ -46,7 +51,7 @@ router.get('/', async (req, res, next) => {
 
     const oneOff = await query(
       `SELECT r.reservation_id, r.starts_at, r.ends_at, r.expires_at,
-              r.confirmation_code, d.desk_number,
+              r.confirmation_code, d.desk_number, coalesce(d.display_name, 'Desk# ' || d.desk_number) AS desk_label,
               u.first_name, u.last_name, u.email, ro.role_type
          FROM reservations r
          JOIN users u  ON u.user_id = r.user_id
@@ -61,7 +66,7 @@ router.get('/', async (req, res, next) => {
     const recurring = await query(
       `SELECT s.series_id AS group_id,
               u.first_name, u.last_name, u.email, ro.role_type,
-              d.desk_number,
+              d.desk_number, d.display_name,
               min(s.expires_at) AS expires_at,
               min(s.active_from) AS active_from,
               -- max() ignores nulls, so an open-ended schedule needs asking about
@@ -81,7 +86,7 @@ router.get('/', async (req, res, next) => {
          LEFT JOIN desks d ON d.desk_id = s.desk_id
         WHERE s.status = 'pending'
         GROUP BY s.series_id, u.user_id, u.first_name, u.last_name, u.email,
-                 ro.role_type, d.desk_number
+                 ro.role_type, d.desk_number, d.display_name
         ORDER BY min(s.created_at)`
     );
 
@@ -93,6 +98,9 @@ router.get('/', async (req, res, next) => {
         email: row.email,
         role: row.role_type,
         deskNumber: row.desk_number,
+        // A staff member can request a conference room, so this queue can hold
+        // one — and without the name it read as "Desk# 13".
+        deskLabel: row.desk_label ?? undefined,
         date: row.starts_at.toISOString().split('T')[0],
         startMin: row.starts_at.getHours() * 60 + row.starts_at.getMinutes(),
         endMin: row.ends_at.getHours() * 60 + row.ends_at.getMinutes(),
@@ -107,6 +115,7 @@ router.get('/', async (req, res, next) => {
         email: row.email,
         role: row.role_type,
         deskNumber: row.desk_number,
+        deskLabel: row.display_name ?? (row.desk_number != null ? `Desk# ${row.desk_number}` : undefined),
         bookingCount: row.booking_count,
         activeFrom: row.active_from ? toDateString(row.active_from) : null,
         activeUntil: row.open_ended || !row.active_until ? null : toDateString(row.active_until),
@@ -164,9 +173,21 @@ router.post('/book', async (req, res, next) => {
     const hoursProblem = officeHoursError(startMin, endMin);
     if (hoursProblem) return res.status(400).json({ message: hoursProblem });
 
+    // The type comes from the row when a specific space is named, and from the
+    // request only when the admin asked for "anything free". Same reasoning as
+    // the public route: a caller must not get to pick which rules apply.
+    let resourceType;
     if (deskId != null) {
-      const deskProblem = await bookableDeskError(deskId);
-      if (deskProblem) return res.status(400).json({ message: deskProblem });
+      const named = await activeResourceById(deskId);
+      if (!named) {
+        return res.status(400).json({
+          message: 'That space is not available — it may have been taken out of service.',
+        });
+      }
+      resourceType = named.resource_type;
+    } else {
+      resourceType = resourceTypeFromRequest(req.body.resourceType);
+      if (!resourceType) return res.status(400).json({ message: BAD_RESOURCE_TYPE });
     }
 
     const { startsAt, endsAt } = toTimestamps(date, startMin, endMin);
@@ -176,24 +197,14 @@ router.post('/book', async (req, res, next) => {
 
     let resolvedDeskId = deskId;
     if (!resolvedDeskId) {
-      const { rows } = await query(
-        `SELECT desk_id FROM desks d
-          WHERE d.is_active
-            AND NOT EXISTS (
-              SELECT 1 FROM reservations r
-               WHERE r.desk_id = d.desk_id
-                 AND r.status IN ('pending', 'approved')
-                 AND tsrange(r.starts_at, r.ends_at) && tsrange($1, $2)
-            )
-          ORDER BY random() LIMIT 1`,
-        [startsAt, endsAt]
-      );
-      if (rows.length === 0) {
+      resolvedDeskId = await findAvailableResource(resourceType, startsAt, endsAt);
+      if (!resolvedDeskId) {
         return res.status(409).json({
-          message: 'Every desk is booked for that time. Try a different slot.',
+          message: resourceType === 'room'
+            ? 'Both conference rooms are booked for that time. Try a different slot.'
+            : 'Every desk is booked for that time. Try a different slot.',
         });
       }
-      resolvedDeskId = rows[0].desk_id;
     }
 
     const sponsorId = resolveDecider(req);
@@ -209,6 +220,15 @@ router.post('/book', async (req, res, next) => {
     let guestRow = null;
 
     if (guest) {
+      // Checked before the visitor is created, so a refused booking does not
+      // leave an account behind for somebody who was never let in.
+      const roleProblem = bookingRoleError(resourceType, 'guest');
+      if (roleProblem) {
+        await client.query('ROLLBACK');
+        inTransaction = false;
+        return res.status(403).json({ message: roleProblem });
+      }
+
       const resolved = await resolveGuest(client, guest, sponsorId);
       if (!resolved.ok) {
         await client.query('ROLLBACK');
@@ -217,6 +237,26 @@ router.post('/book', async (req, res, next) => {
       }
       bookedForId = resolved.user.user_id;
       guestRow = resolved.user;
+    } else {
+      // An admin may book on somebody else's behalf, so the role that matters
+      // is the person the booking is *for*, not the admin holding the token.
+      const { rows: whoFor } = await client.query(
+        `SELECT r.role_type FROM users u
+           JOIN roles r ON r.role_id = u.role_id
+          WHERE u.user_id = $1 AND u.is_active`,
+        [bookedForId]
+      );
+      if (whoFor.length === 0) {
+        await client.query('ROLLBACK');
+        inTransaction = false;
+        return res.status(404).json({ message: 'That account no longer exists.' });
+      }
+      const roleProblem = bookingRoleError(resourceType, whoFor[0].role_type);
+      if (roleProblem) {
+        await client.query('ROLLBACK');
+        inTransaction = false;
+        return res.status(403).json({ message: roleProblem });
+      }
     }
 
     const { rows } = await client.query(
@@ -233,11 +273,14 @@ router.post('/book', async (req, res, next) => {
       ]
     );
 
+    // The name, not the number. This sentence is stored and read back for
+    // years, so "Booked Desk# 13" would be permanently wrong for a room.
     const deskRow = await client.query(
-      'SELECT desk_number FROM desks WHERE desk_id = $1',
+      `SELECT desk_number, ${LABEL_SQL} AS desk_label FROM desks d WHERE d.desk_id = $1`,
       [resolvedDeskId]
     );
     const deskNumber = deskRow.rows[0].desk_number;
+    const deskLabel = deskRow.rows[0].desk_label;
 
     // The sponsor goes into the entry itself, not left to be recovered by
     // joining to a row somebody may later edit. An audit line should still mean
@@ -247,8 +290,8 @@ router.post('/book', async (req, res, next) => {
       reservationId: rows[0].reservation_id,
       actorUserId: sponsorId,
       description: guest
-        ? `Booked Desk# ${deskNumber} for an external visitor and sponsored their access`
-        : `Booked Desk# ${deskNumber} on behalf of a user`,
+        ? `Booked ${deskLabel} for an external visitor and sponsored their access`
+        : `Booked ${deskLabel} on behalf of a user`,
       // The organisation comes from the visitor's record, not from what was
       // typed on this booking. A returning visitor's second booking need not
       // repeat it, and a log line saying they belong to nowhere would be a
@@ -266,6 +309,7 @@ router.post('/book', async (req, res, next) => {
       id: String(rows[0].reservation_id),
       confirmationCode: rows[0].confirmation_code,
       deskNumber,
+      deskLabel,
       status: 'approved',
       external: Boolean(guest),
       bookedFor: guestRow ? `${guestRow.first_name} ${guestRow.last_name}` : undefined,
@@ -274,7 +318,7 @@ router.post('/book', async (req, res, next) => {
     if (inTransaction) await client.query('ROLLBACK').catch(() => {});
     if (err.constraint === 'no_double_booking') {
       return res.status(409).json({
-        message: 'That desk is already reserved for part of this time range.',
+        message: 'That space is already reserved for part of this time range.',
       });
     }
     next(err);
@@ -311,9 +355,12 @@ router.patch('/reservations/:id', async (req, res, next) => {
 
     const existing = await query(
       `SELECT r.reservation_id, r.desk_id, r.starts_at, r.ends_at, r.schedule_id,
-              d.desk_number
+              d.desk_number, ${LABEL_SQL} AS desk_label,
+              ro.role_type
          FROM reservations r
          JOIN desks d ON d.desk_id = r.desk_id
+         JOIN users u ON u.user_id = r.user_id
+         JOIN roles ro ON ro.role_id = u.role_id
         WHERE r.reservation_id = $1 AND r.status = 'approved' AND r.ends_at > now()`,
       [req.params.id]
     );
@@ -327,9 +374,21 @@ router.patch('/reservations/:id', async (req, res, next) => {
 
     let startsAt = before.starts_at;
     let endsAt = before.ends_at;
+    // A booking can be moved to any space that will take its holder — 511A to
+    // 511B is an ordinary thing for an admin to do, and refusing it with "that
+    // desk may have been taken out of service" described neither the room nor
+    // the reason. The type comes from the target row, so the staff-only rule
+    // travels with it and a visitor's booking cannot be moved into a room.
+    let movedTo = null;
     if (deskId != null) {
-      const deskProblem = await bookableDeskError(deskId);
-      if (deskProblem) return res.status(400).json({ message: deskProblem });
+      movedTo = await activeResourceById(deskId);
+      if (!movedTo) {
+        return res.status(400).json({
+          message: 'That space is not available — it may have been taken out of service.',
+        });
+      }
+      const roleProblem = bookingRoleError(movedTo.resource_type, before.role_type);
+      if (roleProblem) return res.status(400).json({ message: roleProblem });
     }
 
     if (wantsTimeChange) {
@@ -355,8 +414,12 @@ router.patch('/reservations/:id', async (req, res, next) => {
       [req.params.id, nextDeskId, startsAt, endsAt, resolveDecider(req)]
     );
 
-    const deskRow = await query('SELECT desk_number FROM desks WHERE desk_id = $1', [nextDeskId]);
+    const deskRow = await query(
+      `SELECT desk_number, ${LABEL_SQL} AS desk_label FROM desks d WHERE d.desk_id = $1`,
+      [nextDeskId]
+    );
     const toDeskNumber = deskRow.rows[0]?.desk_number;
+    const toDeskLabel = deskRow.rows[0]?.desk_label;
 
     // Record only what actually moved, so the trail doesn't claim a desk
     // changed when the admin edited the time and left it alone.
@@ -372,7 +435,7 @@ router.patch('/reservations/:id', async (req, res, next) => {
     }
 
     const parts = [];
-    if (changes.desk) parts.push(`Desk# ${changes.desk.from} → Desk# ${changes.desk.to}`);
+    if (changes.desk) parts.push(`${before.desk_label} → ${toDeskLabel}`);
     if (changes.time) parts.push(`${fmtWindow(before.starts_at, before.ends_at)} → ${fmtWindow(startsAt, endsAt)}`);
 
     await recordActivity({
@@ -387,12 +450,13 @@ router.patch('/reservations/:id', async (req, res, next) => {
       id: String(rows[0].reservation_id),
       deskId: nextDeskId,
       deskNumber: toDeskNumber,
+      deskLabel: toDeskLabel,
       changed: Object.keys(changes),
     });
   } catch (err) {
     if (err.constraint === 'no_double_booking') {
       return res.status(409).json({
-        message: 'That desk is already reserved for part of this time range.',
+        message: 'That space is already reserved for part of this time range.',
       });
     }
     if (err.constraint === 'ends_after_start') {

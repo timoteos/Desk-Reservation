@@ -8,7 +8,7 @@ const {
   DAY_NUMBERS,
   minutesToTime,
   planPattern,
-  deskAvailability,
+  resourceAvailability,
 } = require('../lib/recurringPattern');
 
 const router = express.Router();
@@ -36,7 +36,7 @@ router.post('/availability', readToken, async (req, res, next) => {
     // was free that it holds — a map promising what the booking would refuse,
     // which is the failure this project has produced more than any other.
     const isAdmin = req.user?.role === 'admin';
-    const desks = await deskAvailability(client, plan.slots, {
+    const desks = await resourceAvailability(client, 'desk', plan.slots, {
       ignoreSeriesId: isAdmin && req.body?.ignoreSeriesId
         ? Number(req.body.ignoreSeriesId)
         : null,
@@ -86,7 +86,7 @@ router.post('/', async (req, res, next) => {
     }
     const userId = userResult.rows[0].user_id;
 
-    const availability = await deskAvailability(client, slots);
+    const availability = await resourceAvailability(client, 'desk', slots);
     if (availability.length === 0) {
       return res.status(409).json({ message: 'No desks are configured.' });
     }
@@ -112,7 +112,7 @@ router.post('/', async (req, res, next) => {
       }
       if (best.conflicts > 0) {
         return res.status(409).json({
-          message: `Desk# ${best.deskNumber} is already booked on `
+          message: `${best.label} is already booked on `
             + `${best.conflicts} of the ${best.occurrences} days in that pattern, and a schedule `
             + 'has to cover every day. Pick another desk, or change the dates.',
         });
@@ -125,7 +125,7 @@ router.post('/', async (req, res, next) => {
         const closest = availability.reduce((a, b) => (b.conflicts < a.conflicts ? b : a));
         return res.status(409).json({
           message: 'No desk is free for every day in that pattern. '
-            + `Desk# ${closest.deskNumber} comes closest, with ${closest.conflicts} of `
+            + `${closest.label} comes closest, with ${closest.conflicts} of `
             + `${closest.occurrences} days already booked. Try different dates or days.`,
         });
       }
@@ -134,7 +134,7 @@ router.post('/', async (req, res, next) => {
       best = clear[Math.floor(Math.random() * clear.length)];
     }
 
-    const chosenDesk = { desk_id: best.deskId, desk_number: best.deskNumber };
+    const chosenDesk = { desk_id: best.deskId, desk_number: best.deskNumber, label: best.label };
 
     await client.query('BEGIN');
 
@@ -219,8 +219,8 @@ router.post('/', async (req, res, next) => {
       activityType: 'schedule_requested',
       scheduleId: Object.values(scheduleIds)[0],
       actorUserId: userId,
-      metadata: { bookingsCreated: created.length, deskNumber: chosenDesk.desk_number },
-      description: `Recurring schedule requested — ${created.length} booking(s) on Desk# ${chosenDesk.desk_number}`,
+      metadata: { bookingsCreated: created.length, deskNumber: chosenDesk.desk_number, deskLabel: chosenDesk.label },
+      description: `Recurring schedule requested — ${created.length} booking(s) on ${chosenDesk.label}`,
     }, client);
 
     await client.query('COMMIT');
@@ -231,6 +231,7 @@ router.post('/', async (req, res, next) => {
       confirmationCode: seriesCode,
       expiresAt,
       deskNumber: chosenDesk.desk_number,
+      deskLabel: chosenDesk.label,
       activeFrom: toDateString(from),
       activeUntil: openEnded ? null : toDateString(to),
       openEnded,

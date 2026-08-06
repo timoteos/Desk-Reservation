@@ -1,4 +1,5 @@
 const { officeHoursError, tooSoonError } = require('./officeHours');
+const { assertResourceType, labelFor } = require('./resources');
 
 // Occurrences have to exist as real rows: the exclusion constraint can only see
 // rows, so a schedule that computed its occurrences on the fly would get no
@@ -141,9 +142,16 @@ function planPattern({ days, activeFrom, activeUntil }) {
 // releases its upcoming occurrences before it checks, so its current desk must
 // not be reported as taken by the thing being moved — the same reason editing a
 // single booking ignores itself.
-async function deskAvailability(client, slots, { ignoreSeriesId = null } = {}) {
+// `resourceType` is required and has no default, so a caller that forgets it
+// fails outright rather than quietly offering conference rooms to somebody
+// setting up a weekly desk booking.
+async function resourceAvailability(client, resourceType, slots, { ignoreSeriesId = null } = {}) {
+  assertResourceType(resourceType);
   const { rows: desks } = await client.query(
-    'SELECT desk_id, desk_number FROM desks WHERE is_active ORDER BY desk_number'
+    `SELECT desk_id, desk_number, display_name FROM desks
+      WHERE is_active AND resource_type = $1
+      ORDER BY desk_number`,
+    [resourceType]
   );
 
   const starts = slots.map((s) => s.startsAt);
@@ -167,6 +175,7 @@ async function deskAvailability(client, slots, { ignoreSeriesId = null } = {}) {
     out.push({
       deskId: desk.desk_id,
       deskNumber: desk.desk_number,
+      label: labelFor(desk),
       occurrences: slots.length,
       conflicts: rows[0].conflicts,
       bookable: slots.length - rows[0].conflicts,
@@ -184,5 +193,5 @@ module.exports = {
   occurrencesFor,
   atTime,
   planPattern,
-  deskAvailability,
+  resourceAvailability,
 };
