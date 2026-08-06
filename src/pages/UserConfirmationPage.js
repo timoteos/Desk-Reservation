@@ -4,6 +4,7 @@ import { Mail, CheckCircle2 } from 'lucide-react';
 import Breadcrumb from '../components/Breadcrumb';
 import { createReservation } from '../api/client';
 import BackLink from '../components/BackLink';
+import { resourceLabel } from '../lib/resourceLabel';
 
 // Desk Selection is omitted when the desk was assigned automatically, since
 // the user never passed through that step.
@@ -88,10 +89,10 @@ export default function UserConfirmationPage() {
             <p>
               <span className="font-semibold text-mqd-title">Desk:</span>{' '}
               {confirmation
-                ? `Desk# ${confirmation.deskNumber}`
+                ? resourceLabel(confirmation)
                 : autoAssign
                   ? 'Assigned automatically'
-                  : `Desk# ${deskNumber}`}
+                  : resourceLabel({ deskNumber })}
             </p>
             <p><span className="font-semibold text-mqd-title">Location:</span> MQD System Office</p>
             <p>

@@ -5,6 +5,7 @@ import ScheduleResult from '../components/ScheduleResult';
 import { STATUS_LABELS, STATUS_STYLES, isLiveStatus } from '../lib/bookingStatus';
 import Breadcrumb from '../components/Breadcrumb';
 import { getReservationByCode, cancelReservation, ApiError } from '../api/client';
+import { resourceLabel } from '../lib/resourceLabel';
 
 const CRUMBS = [
   { label: 'Landing', path: '/' },
@@ -196,7 +197,7 @@ export default function ConfirmationCodePage() {
               <p className="text-mqd-title font-semibold">Reservation found</p>
               <div className="bg-surface-page border border-surface-line rounded-lg p-4 text-sm text-ink-body w-full space-y-1 mt-2">
                 <p><span className="font-semibold text-mqd-title">Name:</span> {booking.user}</p>
-                <p><span className="font-semibold text-mqd-title">Desk:</span> Desk# {booking.deskNumber}</p>
+                <p><span className="font-semibold text-mqd-title">Desk:</span> {resourceLabel(booking)}</p>
                 <p><span className="font-semibold text-mqd-title">Date:</span> {formatDate(booking.date)}</p>
                 <p>
                   <span className="font-semibold text-mqd-title">Time:</span>{' '}

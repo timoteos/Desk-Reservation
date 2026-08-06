@@ -4,6 +4,7 @@ import Clock from '../components/Clock';
 import { checkIn } from '../api/client';
 import { formatMinutes } from '../lib/officeHours';
 import LiveFloor from '../components/LiveFloor';
+import { resourceLabel } from '../lib/resourceLabel';
 
 // How long a result stays on screen before the page returns to the prompt.
 // This is a shared screen in a lobby: the previous person's name and desk
@@ -169,7 +170,7 @@ export default function FrontDeskPage() {
             <div className="bg-mqd-50 border border-mqd-200 rounded-xl px-6 py-4 w-full">
               <p className="text-ink-muted text-xs uppercase tracking-wide">Your desk</p>
               <p className="text-5xl font-bold text-mqd-title leading-tight">
-                Desk# {result.deskNumber}
+                {resourceLabel(result)}
               </p>
               <p className="text-ink-body text-sm mt-1">
                 {formatMinutes(result.startMin)} – {formatMinutes(result.endMin)}

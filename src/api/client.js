@@ -108,7 +108,11 @@ export const createRecurringSchedule = (payload) =>
     body: JSON.stringify(payload),
   });
 
-export const getDesks = () => request('/api/desks');
+// The type is always explicit at the call site. The server defaults it to
+// 'desk' at the HTTP boundary, so an older caller is unaffected — but a screen
+// that shows a toggle has to say which side of it the user is on.
+export const getDesks = (resourceType = 'desk') =>
+  request(`/api/desks?resource_type=${encodeURIComponent(resourceType)}`);
 
 export const login = (email, password) =>
   request('/api/auth/login', {
@@ -121,7 +125,8 @@ export const getCurrentAdmin = () => request('/api/auth/me');
 // Check-in takes no token: the confirmation code is the credential, and it is
 // the only one a sponsored visitor will ever have.
 // The floor as it stands. No names — this feeds a screen anybody can walk up to.
-export const getDeskStatus = () => request('/api/desks/status');
+export const getDeskStatus = (resourceType = 'desk') =>
+  request(`/api/desks/status?resource_type=${encodeURIComponent(resourceType)}`);
 
 // Taking a desk you are standing at. Today, starting now, no approval: being
 // physically present is the authorisation.

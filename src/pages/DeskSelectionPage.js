@@ -5,6 +5,7 @@ import Breadcrumb from '../components/Breadcrumb';
 import BackLink from '../components/BackLink';
 import DeskMap, { DeskMapLegend, deskStatuses } from '../components/DeskMap';
 import { getDesks, getReservationsForDate } from '../api/client';
+import { resourceLabel } from '../lib/resourceLabel';
 import {
   OFFICE_START,
   OFFICE_END,
@@ -47,6 +48,10 @@ export default function DeskSelectionPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [selectedDesk, setSelectedDesk] = useState(null);
+  // One floor, one map: desks and conference rooms together, because that is
+  // what the office is. The marker tells them apart — "511A" does not read as a
+  // desk beside "1" — and the rules that differ are enforced where they apply
+  // rather than by hiding half the plan behind a mode.
   const [desks, setDesks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -101,6 +106,9 @@ export default function DeskSelectionPage() {
       return params;
     }, { replace: true });
 
+  // The space currently picked, for the summary beside the legend.
+  const chosen = desks.find((d) => String(d.id) === String(selectedDesk));
+
   const closedDay = !isWorkingDay(dateStr);
 
   // What is still bookable today. Without this the page would offer a window
@@ -127,7 +135,7 @@ export default function DeskSelectionPage() {
     setLoading(true);
     setError(null);
 
-    Promise.all([getDesks(), getReservationsForDate(dateStr)])
+    Promise.all([getDesks('all'), getReservationsForDate(dateStr)])
       .then(([deskList, reservations]) => {
         if (cancelled) return;
         const withStatus = deskStatuses(deskList, reservations, startMin, endMin);
@@ -237,10 +245,23 @@ export default function DeskSelectionPage() {
         />
         </div>
 
-        {/* Legend */}
+        {/* Legend, and what has been picked. The rules that only apply to a
+            conference room are stated here, when one is actually selected,
+            rather than as a banner over a mode nobody chose. */}
         <div className="w-full max-w-5xl bg-white border border-surface-line rounded-xl p-4 text-xs text-ink-body self-start opacity-0 animate-fade-up" style={{ animationDelay: '200ms' }}>
           <p className="font-semibold mb-2 text-mqd-title">Map Legend:</p>
           <DeskMapLegend />
+          {chosen && (
+            <p className="mt-3 pt-3 border-t border-surface-line text-sm text-ink-body">
+              <span className="font-semibold text-mqd-title">{resourceLabel(chosen)}</span>
+              {chosen.capacity != null && ` · seats ${chosen.capacity}`}
+              {chosen.resourceType === 'room' && (
+                <span className="block text-ink-muted mt-1">
+                  Conference rooms are booked by MQD staff. A visitor can attend as their guest.
+                </span>
+              )}
+            </p>
+          )}
         </div>
 
         {/* Back and Next as a pair. Duration is derivable, and reaching this

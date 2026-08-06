@@ -10,6 +10,7 @@ import {
   getRequests,
   decideRequest,
 } from '../api/client';
+import { resourceLabel } from '../lib/resourceLabel';
 
 // Ordered by what an admin does, not by when each tab was built.
 //
@@ -136,7 +137,7 @@ function UserDetailModal({ user, onClose }) {
               <div key={r.id} className="border border-surface-line rounded-lg p-4 text-sm">
                 <p className="font-semibold text-ink">{formatDate(r.date)}</p>
                 <p className="text-ink-muted">
-                  {formatMinutes(r.startMin)} - {formatMinutes(r.endMin)} &middot; Desk# {r.deskNumber}
+                  {formatMinutes(r.startMin)} - {formatMinutes(r.endMin)} &middot; {resourceLabel(r)}
                 </p>
                 {/* Shown so an admin can give someone their code back when
                     they've lost it. Copyable because it usually gets pasted
@@ -289,7 +290,7 @@ function RequestCard({ request, onDecide, busy }) {
                   {' · '}
                 </>
               )}
-              Desk# {request.deskNumber} &middot; {request.bookingCount} bookings
+              {resourceLabel(request)} &middot; {request.bookingCount} bookings
             </p>
             {request.pattern.map((p) => (
               <p key={p.day}>
@@ -304,7 +305,7 @@ function RequestCard({ request, onDecide, busy }) {
             <p className="font-medium">{formatDate(request.date)}</p>
             <p className="text-ink-muted">
               {formatMinutes(request.startMin)} - {formatMinutes(request.endMin)}{' '}
-              &middot; Desk# {request.deskNumber}
+              &middot; {resourceLabel(request)}
             </p>
             {/* Shown so an admin can quote the code back to whoever is asking,
                 without approving first to find it. A recurring request has no

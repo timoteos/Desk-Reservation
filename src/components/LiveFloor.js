@@ -3,6 +3,7 @@ import { WifiOff } from 'lucide-react';
 import DeskMap, { DeskMapLegend } from './DeskMap';
 import { getDeskStatus, claimDesk } from '../api/client';
 import { formatMinutes, SLOT_MINUTES } from '../lib/officeHours';
+import { resourceLabel } from '../lib/resourceLabel';
 
 // How often the floor refreshes.
 //
@@ -52,7 +53,7 @@ export default function LiveFloor({ onClaimed, refreshKey = 0 }) {
 
   const load = useCallback(async () => {
     try {
-      const data = await getDeskStatus();
+      const data = await getDeskStatus('all');
       setDesks(data.desks);
       setNowMin(data.nowMin);
       setLastOk(new Date());
@@ -160,14 +161,21 @@ export default function LiveFloor({ onClaimed, refreshKey = 0 }) {
     }
   };
 
-  const freeCount = desks?.filter((d) => d.status === 'free').length ?? 0;
+  // Counted separately, because the two answer different questions and one
+  // combined number would be misleading: "12 of 14 free" reads as fourteen
+  // desks to somebody glancing at a lobby screen.
+  const deskList = desks?.filter((d) => d.resourceType !== 'room') ?? [];
+  const roomList = desks?.filter((d) => d.resourceType === 'room') ?? [];
+  const freeCount = deskList.filter((d) => d.status === 'free').length;
+  const freeRooms = roomList.filter((d) => d.status === 'free').length;
 
   return (
     <div className="flex flex-col gap-3 w-full">
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
         <h2 className="text-mqd-title font-semibold text-lg">
           {desks
-            ? `${freeCount} of ${desks.length} desks free right now`
+            ? `${freeCount} of ${deskList.length} desks free`
+              + (roomList.length ? ` · ${freeRooms} of ${roomList.length} rooms` : '')
             : 'Loading the floor…'}
         </h2>
         {stale ? (
@@ -186,13 +194,18 @@ export default function LiveFloor({ onClaimed, refreshKey = 0 }) {
         desks={desks ?? []}
         loading={!desks}
         selectedDeskId={selected}
+        // A room shows its live status — "is 511A free?" is most of what gets
+        // asked here — but cannot be claimed at the desk. Whether a room may be
+        // taken with no approval is still open with the PM, so this answers the
+        // question without opening a form that could only end in a refusal.
+        canSelect={(desk) => desk.resourceType !== 'room'}
+        unselectableHint={() => 'Booked from the Reservations page, not taken here.'}
         onSelect={(desk) => {
           setSelected((current) => (String(current) === String(desk.id) ? null : desk.id));
           // A new desk has its own ceiling, so a leftover choice could exceed it.
           setEndMin(null);
           setError(null);
         }}
-        compact
       />
       </div>
       <DeskMapLegend live />
@@ -205,6 +218,11 @@ export default function LiveFloor({ onClaimed, refreshKey = 0 }) {
         {freeCount > 0
           ? 'No booking? Tap any green desk to take it for today.'
           : 'Every desk is taken at the moment. Ask the person at the front desk.'}
+        {roomList.length > 0 && (
+          <span className="block text-ink-muted mt-0.5">
+            Conference rooms are booked in advance, not taken here.
+          </span>
+        )}
       </p>
 
       {/* A layer rather than a section. Inline, this form pushed the page past
@@ -221,12 +239,12 @@ export default function LiveFloor({ onClaimed, refreshKey = 0 }) {
           onClick={(e) => e.stopPropagation()}
           role="dialog"
           aria-modal="true"
-          aria-label={`Take Desk# ${chosen.number}`}
+          aria-label={`Take ${resourceLabel(chosen)}`}
           className="bg-white rounded-2xl shadow-modal p-5 md:p-6 w-full max-w-lg
                      flex flex-col gap-3 max-h-full overflow-y-auto"
         >
           <p className="text-ink-body text-sm">
-            <span className="font-semibold text-mqd-title">Desk# {chosen.number}</span>{' '}
+            <span className="font-semibold text-mqd-title">{resourceLabel(chosen)}</span>{' '}
             — free until {formatMinutes(chosen.freeUntilMin)}
             {endOptions.length > 1 && endOptions[endOptions.length - 1] < 1020 && ', when it is booked'}.
           </p>
@@ -324,7 +342,7 @@ export default function LiveFloor({ onClaimed, refreshKey = 0 }) {
           )}
           {takenWhileChoosing && (
             <p className="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-3 py-2 text-sm">
-              Somebody took Desk# {chosen.number} while you were filling this in. Pick another.
+              Somebody took {resourceLabel(chosen)} while you were filling this in. Pick another.
             </p>
           )}
 
