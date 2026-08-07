@@ -2,7 +2,6 @@
   "name": "desk_reservation",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://timoteos.github.io/Desk-Reservation",
   "dependencies": {
     "@fontsource/public-sans": "^5.3.0",
     "@testing-library/dom": "^10.4.1",
@@ -29,7 +28,7 @@
     "seed": "node server/seed.js",
     "seed:demo": "node server/seed.js --demo",
     "build": "react-scripts build",
-    "predeploy": "npm run build",
+    "predeploy": "PUBLIC_URL=/Desk-Reservation npm run build",
     "deploy": "gh-pages -d build",
     "test": "react-scripts test",
     "test:server": "jest --config jest.server.config.js",

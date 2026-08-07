@@ -1,4 +1,6 @@
 require('dotenv').config();
+const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const cors = require('cors');
 const { pool } = require('./db');
@@ -69,6 +71,43 @@ app.get('/api/health', async (req, res) => {
     res.status(503).json({ status: 'error', database: 'unreachable' });
   }
 });
+
+// Serve the built frontend from the API itself, so both halves are one origin.
+// That is the whole reason to host this way: same origin means no CORS
+// allowlist to maintain, and a session cookie is first-party rather than the
+// third-party kind browsers are steadily switching off.
+//
+// Conditional, because there is no build/ on a laptop — the CRA dev server on
+// :3000 is the frontend there, and this block staying inert keeps that
+// unchanged. It also means a deploy that forgot to build serves 404s from the
+// API rather than a stale page.
+const BUILD_DIR = path.join(__dirname, '..', 'build');
+
+if (fs.existsSync(path.join(BUILD_DIR, 'index.html'))) {
+  app.use(express.static(BUILD_DIR));
+
+  // The SPA fallback: React Router owns /calendar and /admin, but a person who
+  // types one, or refreshes it, asks the server for it first.
+  //
+  // The pattern is a regex because this is Express 5, where `app.get('*')`
+  // does not mean "everything" — path-to-regexp v8 dropped bare wildcards and
+  // throws at startup instead. The server would refuse to boot, at the point
+  // where the message names a routing library nobody here installed directly.
+  //
+  // Registered after the API routes, and still checking the prefix: without
+  // that, a misspelled endpoint would hand back index.html with a 200, and the
+  // client would report a JSON parse error rather than the 404 it deserved.
+  //
+  // /static/ is excluded for the same reason. Those filenames carry a content
+  // hash, so a request for one that is missing means a stale page is asking for
+  // a chunk the current build no longer has. Falling back would answer with
+  // HTML and a 200, and the browser would fail on `Unexpected token '<'` —
+  // which says nothing about the deploy that caused it. A 404 does.
+  app.get(/.*/, (req, res, next) => {
+    if (req.path.startsWith('/api/') || req.path.startsWith('/static/')) return next();
+    res.sendFile(path.join(BUILD_DIR, 'index.html'));
+  });
+}
 
 // Anything a route passes to next() lands here.
 app.use((err, req, res, next) => {

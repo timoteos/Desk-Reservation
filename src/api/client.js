@@ -6,7 +6,25 @@
 // concatenate into `https://host//api/...`, which Express does not route — a 404
 // on every single call, from a value that looks entirely correct in the .env file
 // and in the Render dashboard. Costly to diagnose, one character to prevent.
-const BASE_URL = (process.env.REACT_APP_API_URL || 'http://localhost:5001').replace(/\/+$/, '');
+//
+// The fallback differs by build, because the two deployments differ. On GitHub
+// Pages the frontend is served by one host and the API lives on another, so an
+// absolute URL is required and .env.production.local supplies it. On Azure the
+// API serves this bundle itself, so the right base is the empty string: every
+// call goes to whatever host the page was loaded from, which keeps the app
+// working on the azurewebsites.net name, on a custom domain and on a
+// deployment slot without a rebuild for each.
+//
+// Splitting on NODE_ENV rather than on a new variable is what makes the CI
+// build correct by default. .env.production.local is gitignored — the CI
+// checkout does not have it — so a build there falls through to the empty
+// string. A single default of 'http://localhost:5001' would have been baked
+// into the Azure bundle instead, and every request from the hosted site would
+// have gone to the visitor's own machine.
+const BASE_URL = (
+  process.env.REACT_APP_API_URL
+  || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5001')
+).replace(/\/+$/, '');
 
 class ApiError extends Error {
   constructor(message, status) {
