@@ -19,16 +19,23 @@ const SCOPES = [
 // them. How the booking came about is the useful distinction — and none of
 // these is better or worse than another, so the colours are distinguishing
 // rather than semantic.
+// walk_up has been written to the database since the front desk was built and
+// was missing from here, so a desk claimed in person fell through to the raw
+// column value and rendered as "WALK_UP". It is a distinct way for a booking to
+// exist — nobody approved it, somebody was simply standing there — which is
+// exactly what an admin reading this list wants to be told.
 const SOURCE_LABELS = {
   user: 'User Booked',
   admin: 'Admin Booked',
   recurring: 'Recurring',
+  walk_up: 'Front Desk',
 };
 
 const SOURCE_STYLES = {
   user: 'bg-surface-panel text-ink-body',
   admin: 'bg-sky-100 text-sky-800',
   recurring: 'bg-indigo-100 text-indigo-800',
+  walk_up: 'bg-amber-100 text-amber-800',
 };
 
 const formatMinutes = (mins) => {
@@ -135,7 +142,14 @@ function BookingCard({ r, confirmingId, setConfirmingId, busyId, onCancel, onEdi
 
 
 export default function ReservationsTab({ dataVersion = 0, onChanged }) {
-  const [scope, setScope] = useState('upcoming');
+  // Ongoing, matching the first scope button rather than contradicting it.
+  //
+  // The tab opened on Upcoming, which means `starts_at > now()` — a filter a
+  // front-desk claim can never satisfy, because it starts the moment it is
+  // made. So a desk claimed in person was written, logged, and then absent from
+  // the first screen anybody checked, which read as it never having been
+  // recorded at all. It was only ever one scope away.
+  const [scope, setScope] = useState('ongoing');
   const [reservations, setReservations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

@@ -73,7 +73,7 @@ test('an empty result explains where the schedules went', async () => {
   api.getAllReservations.mockResolvedValue([scheduleDay(1, '2027-08-03')]);
   render(<ReservationsTab />);
 
-  await screen.findByText(/No upcoming one-off bookings/);
+  await screen.findByText(/No ongoing one-off bookings/);
   expect(
     screen.getByText(/Recurring schedules and the days they hold are on the Schedules tab/)
   ).toBeInTheDocument();
