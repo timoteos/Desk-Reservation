@@ -258,7 +258,16 @@ export default function CalendarPage() {
 
   // Was `durationMins / 60` with an "s" bolted on, which read "1.5 hours" the
   // moment bookings could step by the half hour.
-  const durationLabel = formatDuration(durationMins);
+  // What is actually on offer, which for a whole day is not always what was
+  // asked for: a full day picked at four in the afternoon is the hour that is
+  // left. Saying "Blocks of 9 hours 30 minutes" above a 4:00–5:00 slot
+  // contradicts the only other line on the panel, on the screen where somebody
+  // is deciding how long they get.
+  const durationLabel = isFullDay
+    ? (availableSlots.length
+        ? formatDuration(availableSlots[0].endMin - availableSlots[0].startMin)
+        : 'a full day')
+    : formatDuration(durationMins);
 
   return (
     <>
