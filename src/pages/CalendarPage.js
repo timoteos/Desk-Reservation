@@ -46,7 +46,9 @@ const MONTHS = [
 // That was the definition fighting the intent: somebody choosing "full day" at
 // nine in the morning wants the rest of the day, not to be told the day is
 // unavailable because part of it has gone.
-const getAvailableSlots = (durationMins, bookings, earliestMin = 0, deskCount = 0, fullDay = false) => {
+// Exported for tests. The full-day rule was reported as a bug from the app
+// rather than caught here, which is the gap this closes.
+export const getAvailableSlots = (durationMins, bookings, earliestMin = 0, deskCount = 0, fullDay = false) => {
   const slots = [];
 
   const firstStart = Math.max(DAY_START, Math.ceil(earliestMin / INCREMENT) * INCREMENT);
