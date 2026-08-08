@@ -31,12 +31,28 @@ const MINUTE = 60 * 1000;
 // stops being an obstacle.
 async function releaseNoShows(client = { query }) {
   const { rows } = await client.query(
-    `UPDATE reservations
+    // Desks only. A conference room booked in advance has no way to be checked
+    // in — the confirmation-code screen is for a person arriving at a desk, and
+    // nobody has decided who checks a room in on behalf of a meeting. So this
+    // swept up every room booking fifteen minutes after it started: the row
+    // went to no_show, the booking vanished from the calendar and the
+    // reservations list, and the room reported itself free while a meeting was
+    // sitting in it. Silent, and it destroyed the booking rather than flagging
+    // it.
+    //
+    // The rule is right for a desk, where an empty chair means the desk is
+    // genuinely free. It is wrong for a room, where nobody taps anything on the
+    // way in. When check-in for rooms is decided this filter is where it
+    // changes; until then a room keeps its booking.
+    `UPDATE reservations r
         SET status = 'no_show'
-      WHERE status = 'approved'
-        AND checked_in_at IS NULL
-        AND starts_at + ($1 || ' minutes')::interval < now()
-      RETURNING reservation_id`,
+       FROM desks d
+      WHERE d.desk_id = r.desk_id
+        AND d.resource_type = 'desk'
+        AND r.status = 'approved'
+        AND r.checked_in_at IS NULL
+        AND r.starts_at + ($1 || ' minutes')::interval < now()
+      RETURNING r.reservation_id`,
     [NO_SHOW_GRACE_MINUTES]
   );
 

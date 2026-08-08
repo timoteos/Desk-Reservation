@@ -5,6 +5,7 @@ import Breadcrumb from '../components/Breadcrumb';
 import BackLink from '../components/BackLink';
 import { getReservationsForDate, getDesks } from '../api/client';
 import {
+  MINS_IN_WORKDAY,
   OFFICE_START as DAY_START,
   OFFICE_END as DAY_END,
   SLOT_MINUTES as INCREMENT,
@@ -36,11 +37,28 @@ const MONTHS = [
 // A booking only rules out the desk it sits on, so a slot is unavailable only
 // once every desk is taken for that window. Treating any booking as blocking
 // would let one all-day reservation close the whole office.
-const getAvailableSlots = (durationMins, bookings, earliestMin = 0, deskCount = 0) => {
+// `fullDay` is what a whole-day booking actually means: from the earliest slot
+// still open to close of business, rather than a fixed 570-minute block that
+// only ever fits at 7:30 AM.
+//
+// As a fixed block it could not be booked for today from 7:31 onwards — nine
+// and a half hours left in the office and the calendar's answer was Monday.
+// That was the definition fighting the intent: somebody choosing "full day" at
+// nine in the morning wants the rest of the day, not to be told the day is
+// unavailable because part of it has gone.
+const getAvailableSlots = (durationMins, bookings, earliestMin = 0, deskCount = 0, fullDay = false) => {
   const slots = [];
-  for (let start = DAY_START; start + durationMins <= DAY_END; start += INCREMENT) {
-    const end = start + durationMins;
+
+  const firstStart = Math.max(DAY_START, Math.ceil(earliestMin / INCREMENT) * INCREMENT);
+  const step = fullDay ? Math.max(DAY_END - firstStart, 0) : durationMins;
+  if (fullDay && step < INCREMENT) return slots;
+
+  for (let start = DAY_START; start + step <= DAY_END; start += INCREMENT) {
+    const end = start + step;
     if (start < earliestMin) continue;
+    // A whole day is one choice, not a list of them: every later start would be
+    // a shorter day wearing the same name.
+    if (fullDay && start !== firstStart) continue;
     const taken = new Set(
       bookings
         .filter((b) => start < b.endMin && end > b.startMin)
@@ -185,7 +203,12 @@ export default function CalendarPage() {
   // gaining or losing a desk shouldn't need a code change here.
   useEffect(() => {
     let cancelled = false;
-    getDesks()
+    // 'all', because the bookings this is compared against are all of them.
+    // The day's reservations come back unfiltered — a conference room booking
+    // is in the list — while this counted desks only, so two booked rooms made
+    // the calendar call a slot full once ten desks were taken and hid two free
+    // ones. The numerator and the denominator have to count the same set.
+    getDesks('all')
       .then((desks) => { if (!cancelled) setDeskCount(desks.length); })
       .catch((err) => { if (!cancelled) setError(err.message); });
     return () => { cancelled = true; };
@@ -219,7 +242,13 @@ export default function CalendarPage() {
   // is still bookable today.
   const earliestMin = earliestStartOn(dateStr);
 
-  const availableSlots = getAvailableSlots(durationMins, bookings, earliestMin, deskCount ?? 0);
+  // A single whole day. Several days is still a fixed block per day, so only
+  // the one-day case is stretched to "what is left of today".
+  const isFullDay = searchParams.get('type') === 'full' && durationMins <= MINS_IN_WORKDAY;
+
+  const availableSlots = getAvailableSlots(
+    durationMins, bookings, earliestMin, deskCount ?? 0, isFullDay
+  );
 
   const formattedDate = selectedDate.toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
