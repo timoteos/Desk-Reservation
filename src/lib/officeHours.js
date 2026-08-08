@@ -13,11 +13,6 @@ export const OFFICE_START = 450;  // 7:30 AM, in minutes from midnight
 export const OFFICE_END = 1020;   // 5:00 PM
 export const SLOT_MINUTES = 30;   // bookings start and end on the half hour
 
-// Bookings close this many minutes before a slot begins: an 11:00 desk can be
-// claimed at 10:55 but not at 10:56. Mirrored in server/lib/officeHours.js,
-// which is the copy that actually enforces it.
-export const BOOKING_LEAD_MINUTES = 5;
-
 export const MINS_IN_WORKDAY = OFFICE_END - OFFICE_START;
 
 export const formatMinutes = (mins) => {
@@ -84,9 +79,13 @@ const todayString = () => {
 // the admin dialog would happily offer a window that had already begun and only
 // fail on submit. One definition, used by all three.
 //
-// Always the slot AFTER the current one, never the one in progress: a booking
-// starting at the exact current minute is refused by the API by the time the
-// request lands. A value past OFFICE_END means the day is over.
+// The slot currently in progress, not the one after it. At 10:01 the earliest
+// start is 10:00 — the half hour you are standing in is still yours to book,
+// which is how somebody walking up to a free desk actually thinks about it.
+//
+// This used to round up past a five-minute lead, so 10:01 offered 10:30 and a
+// desk sitting empty could not be taken for another twenty-nine minutes. A
+// value past OFFICE_END means the day is over.
 export const earliestStartOn = (dateStr) => {
   if (!dateStr) return OFFICE_START;
   const today = todayString();
@@ -97,10 +96,10 @@ export const earliestStartOn = (dateStr) => {
   const nowMin = now.getHours() * 60 + now.getMinutes();
   if (nowMin < OFFICE_START) return OFFICE_START;
 
-  // The first slot boundary at least BOOKING_LEAD_MINUTES away. Rounding up from
-  // now + lead rather than stepping to the next boundary is what closes the
-  // 11:00 slot at 10:56 instead of at 11:00 exactly.
-  return Math.ceil((nowMin + BOOKING_LEAD_MINUTES) / SLOT_MINUTES) * SLOT_MINUTES;
+  // Floor, so the slot in progress is included. The API agrees: it refuses a
+  // start only once that slot has finished, so nothing offered here is rejected
+  // on submit.
+  return Math.floor(nowMin / SLOT_MINUTES) * SLOT_MINUTES;
 };
 
 // Whether a window can still be booked at all. Decides what the interface

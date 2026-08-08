@@ -1,5 +1,5 @@
 import {
-  earliestStartOn, BOOKING_LEAD_MINUTES, OFFICE_START, SLOT_MINUTES,
+  earliestStartOn, OFFICE_START, SLOT_MINUTES,
   formatDuration, MINS_IN_WORKDAY,
 } from './officeHours';
 
@@ -14,19 +14,27 @@ const atLocalTime = (hh, mm) => {
 beforeEach(() => jest.useFakeTimers());
 afterEach(() => jest.useRealTimers());
 
-test('a slot stays claimable until the lead time, then closes', () => {
-  // The rule people actually asked for: an 11:00 desk can be taken at 10:55 but
-  // not at 10:56, rather than staying open until 11:00 exactly.
-  const today = atLocalTime(10, 55);
-  expect(earliestStartOn(today)).toBe(11 * 60);
+// The half hour in progress is offered, not the one after it. At 10:01 the
+// 10:00 slot is what somebody standing at a free desk is asking for.
+test('the slot in progress is the earliest on offer', () => {
+  const today = atLocalTime(10, 1);
+  expect(earliestStartOn(today)).toBe(10 * 60);
 
-  atLocalTime(10, 56);
-  expect(earliestStartOn(today)).toBe(11 * 60 + SLOT_MINUTES);
+  atLocalTime(10, 29);
+  expect(earliestStartOn(today)).toBe(10 * 60);
 });
 
-test('the lead time is what closes it, not the slot boundary', () => {
-  const today = atLocalTime(10, 60 - BOOKING_LEAD_MINUTES - 1);
-  expect(earliestStartOn(today)).toBe(11 * 60);
+// One minute later the slot has rolled over, and so does the offer.
+test('it moves on at the slot boundary, not before it', () => {
+  const today = atLocalTime(10, 30);
+  expect(earliestStartOn(today)).toBe(10 * 60 + SLOT_MINUTES);
+});
+
+// The case the five-minute lead broke: at 10:26 it offered 11:00, so neither
+// the running slot nor the next one could be taken.
+test('nothing closes early any more', () => {
+  const today = atLocalTime(10, 26);
+  expect(earliestStartOn(today)).toBe(10 * 60);
 });
 
 test('a future date offers the whole day regardless of the time now', () => {

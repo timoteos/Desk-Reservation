@@ -2,7 +2,7 @@
  * @jest-environment node
  */
 const { execFileSync } = require('child_process');
-const { tooSoonError, BOOKING_LEAD_MINUTES, OFFICE_TZ } = require('./officeHours');
+const { tooSoonError, SLOT_MINUTES, OFFICE_TZ } = require('./officeHours');
 
 const minutesFromNow = (mins) => new Date(Date.now() + mins * 60 * 1000);
 
@@ -54,14 +54,23 @@ test('a slot that has been and gone is refused as past', () => {
   expect(tooSoonError(minutesFromNow(-30))).toMatch(/already passed/);
 });
 
-test('a slot inside the lead time is refused, and says why', () => {
-  const err = tooSoonError(minutesFromNow(BOOKING_LEAD_MINUTES - 1));
-  expect(err).toMatch(new RegExp(`close ${BOOKING_LEAD_MINUTES} minutes before`));
-  // Not the "already passed" message — it has not passed, and telling somebody
-  // that 11:00 is in the past at 10:56 is simply untrue.
-  expect(err).not.toMatch(/already passed/);
+// The slot you are standing in is bookable. Somebody arriving at 10:01 wants
+// the half hour that is running, and a desk sitting empty in front of them is
+// not a thing to be told to wait for.
+test('the slot already in progress is still claimable', () => {
+  expect(tooSoonError(minutesFromNow(-1))).toBeNull();
+  expect(tooSoonError(minutesFromNow(-(SLOT_MINUTES - 1)))).toBeNull();
 });
 
-test('a slot just beyond the lead time is allowed', () => {
-  expect(tooSoonError(minutesFromNow(BOOKING_LEAD_MINUTES + 1))).toBeNull();
+// The boundary, which is the whole rule: claimable until the slot ends, then
+// not. Exactly at the end is refused — that slot is over.
+test('a slot stops being claimable the moment it ends', () => {
+  expect(tooSoonError(minutesFromNow(-SLOT_MINUTES))).toMatch(/already passed/);
+});
+
+// There is no lead time any more. This is the case the old rule got wrong in
+// both directions at once: at 10:26 neither 10:00 nor 10:30 could be booked.
+test('a slot minutes away is allowed, with nothing closing early', () => {
+  expect(tooSoonError(minutesFromNow(1))).toBeNull();
+  expect(tooSoonError(minutesFromNow(4))).toBeNull();
 });
