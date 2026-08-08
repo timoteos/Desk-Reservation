@@ -223,7 +223,7 @@ async function activeResourceById(deskId, client = null) {
 async function resourceByNumber(resourceType, deskNumber, client = null) {
   assertResourceType(resourceType);
   const { rows } = await runnerFor(client)(
-    `SELECT desk_id, desk_number, display_name, short_name, capacity
+    `SELECT desk_id, desk_number, display_name, short_name, capacity, resource_type
        FROM desks
       WHERE desk_number = $1 AND is_active AND resource_type = $2`,
     [deskNumber, resourceType]

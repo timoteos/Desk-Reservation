@@ -39,6 +39,10 @@ export default function LiveFloor({ onClaimed, refreshKey = 0 }) {
   const [lastOk, setLastOk] = useState(null);
   const [stale, setStale] = useState(false);
   const [selected, setSelected] = useState(null);
+  // Which kind of space is being taken. 'desk' first because that is almost
+  // every walk-up; a room is the deliberate case, and having to say so is the
+  // point — it is a ten-seat room, not something to end up in by mistyping.
+  const [mode, setMode] = useState('desk');
   const [email, setEmail] = useState('');
   // Staff take a desk with their address alone. A visitor has no account, so
   // they give their details and name the person they are here to see — who is
@@ -178,6 +182,38 @@ export default function LiveFloor({ onClaimed, refreshKey = 0 }) {
               + (roomList.length ? ` · ${freeRooms} of ${roomList.length} rooms` : '')
             : 'Loading the floor…'}
         </h2>
+        {/* Two buttons rather than a dropdown: this is a wall screen operated
+            by somebody standing up, and both options should be reachable in one
+            tap without a menu opening under a finger. */}
+        <div className="flex rounded-lg border border-surface-line overflow-hidden shrink-0" role="group" aria-label="What to take">
+          {[
+            { key: 'desk', label: 'Desks' },
+            { key: 'room', label: 'Conference Rooms' },
+          ].map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              aria-pressed={mode === option.key}
+              onClick={() => {
+                setMode(option.key);
+                // A selection cannot survive the switch: the space it points at
+                // is no longer selectable, so leaving it would arm a form
+                // against something the map now refuses.
+                setSelected(null);
+                setEndMin(null);
+                setError(null);
+              }}
+              className={`px-3 py-1.5 text-sm font-semibold transition ${
+                mode === option.key
+                  ? 'bg-mqd-btn text-white'
+                  : 'bg-white text-ink-body hover:bg-surface-panel'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
         {stale ? (
           <span className="flex items-center gap-1.5 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1">
             <WifiOff className="w-3.5 h-3.5" />
@@ -194,12 +230,15 @@ export default function LiveFloor({ onClaimed, refreshKey = 0 }) {
         desks={desks ?? []}
         loading={!desks}
         selectedDeskId={selected}
-        // A room shows its live status — "is 511A free?" is most of what gets
-        // asked here — but cannot be claimed at the desk. Whether a room may be
-        // taken with no approval is still open with the PM, so this answers the
-        // question without opening a form that could only end in a refusal.
-        canSelect={(desk) => desk.resourceType !== 'room'}
-        unselectableHint={() => 'Booked from the Reservations page, not taken here.'}
+        // The whole floor stays drawn in both modes — the map is how somebody
+        // finds where they are, and hiding half the office would make it a
+        // worse map. The mode decides what may be *taken*, not what is shown,
+        // so "is 511A free?" is still answerable while standing in Desks.
+        canSelect={(desk) => (mode === 'room') === (desk.resourceType === 'room')}
+        unselectableHint={(desk) =>
+          desk.resourceType === 'room'
+            ? 'Switch to Conference Rooms to take this one.'
+            : 'Switch to Desks to take this one.'}
         onSelect={(desk) => {
           setSelected((current) => (String(current) === String(desk.id) ? null : desk.id));
           // A new desk has its own ceiling, so a leftover choice could exceed it.

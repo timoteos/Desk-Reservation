@@ -365,20 +365,57 @@ describe('conference rooms on the kiosk', () => {
     expect(screen.getByLabelText('Desk 4, free')).toBeEnabled();
   });
 
-  it('says why a room cannot be taken rather than just greying it out', async () => {
+  it('says which mode a space belongs to rather than just greying it out', async () => {
     render(<LiveFloor />);
     await screen.findByText(/2 of 4 desks free/);
 
-    // Every room carries the reason, and no desk does.
-    expect(screen.getAllByLabelText(/Booked from the Reservations page/)).toHaveLength(2);
+    // Desks mode: every room carries the reason, and no desk does.
+    expect(screen.getAllByLabelText(/Switch to Conference Rooms/)).toHaveLength(2);
     expect(screen.getByLabelText('Desk 4, free')).toBeInTheDocument();
   });
 
-  it('does not open the claim form when a room is tapped', async () => {
+  it('does not open the claim form for a space the current mode will not take', async () => {
     render(<LiveFloor />);
     await screen.findByText(/2 of 4 desks free/);
 
     fireEvent.click(screen.getByLabelText(/Conference Room 511A, free/));
+    expect(screen.queryByLabelText(/your email address/i)).not.toBeInTheDocument();
+  });
+
+  // The toggle swaps what may be taken, not what is drawn — the map is how
+  // somebody finds where they are standing, so both kinds stay on it.
+  it('lets a room be taken once the mode says so, and refuses desks then', async () => {
+    render(<LiveFloor />);
+    await screen.findByText(/2 of 4 desks free/);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Conference Rooms' }));
+
+    expect(screen.getByLabelText(/Conference Room 511A, free/)).toBeEnabled();
+    // Regex, not the exact string: an unselectable marker carries the reason in
+    // its accessible name, which is the point of the hint.
+    expect(screen.getByLabelText(/Desk 4, free/)).toBeDisabled();
+    expect(screen.getAllByLabelText(/Switch to Desks/).length).toBeGreaterThan(0);
+  });
+
+  it('opens the claim form for a room in room mode', async () => {
+    render(<LiveFloor />);
+    await screen.findByText(/2 of 4 desks free/);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Conference Rooms' }));
+    fireEvent.click(screen.getByLabelText(/Conference Room 511A, free/));
+    expect(screen.getByLabelText(/your email address/i)).toBeInTheDocument();
+  });
+
+  // Switching modes with something selected would otherwise leave a form armed
+  // against a space the map no longer allows.
+  it('drops the selection when the mode changes', async () => {
+    render(<LiveFloor />);
+    await screen.findByText(/2 of 4 desks free/);
+
+    fireEvent.click(screen.getByLabelText('Desk 4, free'));
+    expect(screen.getByLabelText(/your email address/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Conference Rooms' }));
     expect(screen.queryByLabelText(/your email address/i)).not.toBeInTheDocument();
   });
 

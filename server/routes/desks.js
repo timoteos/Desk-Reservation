@@ -10,7 +10,7 @@ const { recordActivity } = require('../lib/activityLog');
 const { guestDetailsError, resolveGuest } = require('../lib/guests');
 const {
   LISTABLE_TYPES, listableTypeFromRequest,
-  listResources, labelFor, shortLabelFor, resourceByNumber,
+  listResources, labelFor, shortLabelFor, resourceByNumber, bookingRoleError,
 } = require('../lib/resources');
 
 const router = express.Router();
@@ -193,23 +193,34 @@ router.post('/:number/claim', async (req, res, next) => {
       });
     }
 
-    // Desks only, by name rather than by silence.
+    // Either kind may be taken here now. Rooms used to be refused outright,
+    // pending a decision on whether one could be claimed without approval; the
+    // answer is that it can, on the same terms as a desk — somebody is standing
+    // at the front desk, which is what makes a walk-up self-authorising.
     //
-    // A room is refused here deliberately, not incidentally: whether a
-    // conference room can be taken with no approval, and who checks one in, are
-    // open questions with the PM. Until they are answered the safe default is
-    // to refuse — an allow-list, the same shape the check-in fix took after a
-    // deny-list let an unapproved request through.
-    const desk = await resourceByNumber('desk', req.params.number, client);
+    // Still resolved by type rather than by number alone, because the type is
+    // what the staff-only rule below turns on.
+    const desk = (await resourceByNumber('desk', req.params.number, client))
+      ?? (await resourceByNumber('room', req.params.number, client));
     if (!desk) {
-      const room = await resourceByNumber('room', req.params.number, client);
       return res.status(400).json({
-        message: room
-          ? `${labelFor(room)} cannot be taken at the front desk. Book a conference room from the Reservations page.`
-          : 'That desk is not available — it may have been taken out of service.',
+        message: 'That space is not available — it may have been taken out of service.',
       });
     }
     const deskId = desk.desk_id;
+
+    // The one rule that does not relax. A conference room is answerable to
+    // somebody with an MQD account, and this screen requires no sign-in — so an
+    // external visitor signing themselves in cannot take a ten-seat room on
+    // their own say-so. They can still be in the meeting; the person they are
+    // here to see books it.
+    //
+    // Checked against the payload rather than the resolved user because the
+    // visitor path *creates* its user, so by the time there is a role to read
+    // the row already exists.
+    if (desk.resource_type === 'room' && guest) {
+      return res.status(403).json({ message: bookingRoleError('room', 'guest') });
+    }
 
     // Capped by whatever is booked next on this desk, so a claim is never
     // offered a window it would be thrown out of half way through.
