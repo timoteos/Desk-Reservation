@@ -1,0 +1,70 @@
+# NOT ACTIVE AT THIS PATH. GitHub only runs workflows from .github/workflows/,
+# and it refuses a push that writes there unless the token carries the
+# `workflow` scope. This file is parked here so it is version-controlled and
+# reviewable in the meantime. Once the token has that scope:
+#
+#     git mv deploy/azure-deploy.yml .github/workflows/azure-deploy.yml
+#
+# and it becomes live. Nothing else about it needs to change.
+#
+# Build here, deploy a finished package.
+#
+# The alternative is shipping source and letting Azure's build system (Oryx)
+# run the install and the React build on the App Service instance. That is
+# fewer lines and worse: the build then runs on the smallest tier you are
+# paying for, a `react-scripts build` is memory-hungry enough to be killed
+# there, and a failure surfaces as a deploy that "succeeded" and a site that
+# serves the previous version. Building here means a broken build is a red X
+# on a commit instead.
+name: Deploy to Azure
+
+on:
+  push:
+    branches: [master]
+  # So the first run does not require inventing a commit.
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      # The exclusion constraint and the booking rules are the parts of this
+      # nobody wants to find broken in production, and they have tests. Run
+      # them before anything is uploaded rather than after.
+      # CI=true makes create-react-app treat warnings as failures and, more to
+      # the point, stops its test runner from waiting for input forever.
+      - run: npm run test:all
+        env:
+          CI: true
+
+      # No PUBLIC_URL, which is the point of dropping `homepage` from
+      # package.json: assets resolve from the domain root here, where the API
+      # serves them, instead of from the /Desk-Reservation subpath GitHub Pages
+      # needs. `npm run deploy` still sets that variable for Pages.
+      - run: npm run build
+
+      # Only what the server actually needs at runtime. Shipping the repo would
+      # send src/, the test suite and the floor-plan sources to a web host for
+      # no reason.
+      - name: Stage the deployment package
+        run: |
+          mkdir -p package
+          cp -r server build package.json package-lock.json package/
+          cd package && npm ci --omit=dev
+
+      - uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_APP_NAME }}
+          publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE }}
+          package: package
