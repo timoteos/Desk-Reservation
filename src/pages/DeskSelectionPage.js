@@ -197,8 +197,17 @@ export default function DeskSelectionPage() {
                   onChange={(e) => handleStartChange(Number(e.target.value))}
                   className="border border-surface-line rounded-lg px-3 py-2 text-ink-body bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
                 >
-                  {timeOptions({ to: OFFICE_END - SLOT_MINUTES }).map((o) => (
-                    <option key={o.value} value={o.value} disabled={o.value < earliest}>
+                  {/* Elapsed slots are absent, not disabled. A list that opens
+                      on 7:30 AM at four in the afternoon makes somebody scroll
+                      past eighteen dead rows to reach the one they can pick,
+                      and a greyed row still reads as a choice that exists.
+                      Clamped so the last slot of the day is always offered —
+                      an empty select would say nothing at all about why. */}
+                  {timeOptions({
+                    from: Math.min(earliest, OFFICE_END - SLOT_MINUTES),
+                    to: OFFICE_END - SLOT_MINUTES,
+                  }).map((o) => (
+                    <option key={o.value} value={o.value}>
                       {o.label}
                     </option>
                   ))}

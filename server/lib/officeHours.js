@@ -36,6 +36,11 @@ const OFFICE_START = 450;  // 7:30 AM, in minutes from midnight
 const OFFICE_END = 1020;   // 5:00 PM
 const SLOT_MINUTES = 30;
 
+// How long before a slot ends it stops being bookable — see tooSoonError.
+// Mirrors BOOKING_LEAD_MINUTES in src/lib/officeHours.js, which decides what
+// the pickers offer; this decides what is accepted.
+const BOOKING_LEAD_MINUTES = 5;
+
 const formatMinutes = (mins) => {
   const h = Math.floor(mins / 60);
   const ampm = h >= 12 ? 'PM' : 'AM';
@@ -93,23 +98,26 @@ const minutesOf = (date) => date.getHours() * 60 + date.getMinutes();
 // `startsAt <= new Date()`, which is how a lead time could have been added to
 // one of them and not the others.
 //
-// A slot stays claimable until it has actually finished, so at 10:01 the
-// 10:00 slot is still yours to take. Two rules used to stand in the way: a
-// booking could not start in the past at all, and one closed five minutes
-// before it began. Both look reasonable written down and are wrong in the
-// room. Somebody arriving at 10:01 wants the half hour they are standing in,
-// and being told to wait until 10:30 for a desk that is free right now is the
-// system inventing a rule the office does not have. The five-minute lead was
-// worse: it made 10:26 to 10:30 a dead zone where neither the current slot nor
-// the next one could be booked.
+// A slot stays claimable until five minutes before it ends: the 10:00 slot is
+// yours until 10:25. Somebody arriving at 10:01 wants the half hour they are
+// standing in, and being told to wait until 10:30 for a desk that is free in
+// front of them is the system inventing a rule the office does not have. The
+// five minutes at the end stop a slot being claimed with almost nothing left
+// in it.
 //
-// The comparison is against the end of the slot the booking starts in, not
-// against its own end, so this stays a statement about the slot rather than
-// about how long somebody asked for.
+// This replaces two rules that between them made 10:26 to 10:30 unbookable in
+// either direction: a booking could not start in the past at all, and a slot
+// closed five minutes before it *began*, so 11:00 shut at 10:56. The lead is
+// the same five minutes, measured from the other end.
+//
+// Always the slot the booking starts in, never its own end, so the answer does
+// not change with how long somebody asked for. A two-hour booking from 10:00
+// is judged on 10:00, exactly as a half-hour one is.
 function tooSoonError(startsAt) {
-  const slotEnds = startsAt.getTime() + SLOT_MINUTES * 60 * 1000;
+  const closesAt = startsAt.getTime()
+    + (SLOT_MINUTES - BOOKING_LEAD_MINUTES) * 60 * 1000;
 
-  if (slotEnds <= Date.now()) {
+  if (Date.now() >= closesAt) {
     return 'That time has already passed. Pick a later slot.';
   }
   return null;
@@ -117,6 +125,7 @@ function tooSoonError(startsAt) {
 
 module.exports = {
   OFFICE_TZ,
+  BOOKING_LEAD_MINUTES,
   tooSoonError,
   OFFICE_START,
   OFFICE_END,

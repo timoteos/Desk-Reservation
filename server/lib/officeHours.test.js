@@ -2,7 +2,7 @@
  * @jest-environment node
  */
 const { execFileSync } = require('child_process');
-const { tooSoonError, SLOT_MINUTES, OFFICE_TZ } = require('./officeHours');
+const { tooSoonError, SLOT_MINUTES, BOOKING_LEAD_MINUTES, OFFICE_TZ } = require('./officeHours');
 
 const minutesFromNow = (mins) => new Date(Date.now() + mins * 60 * 1000);
 
@@ -54,23 +54,34 @@ test('a slot that has been and gone is refused as past', () => {
   expect(tooSoonError(minutesFromNow(-30))).toMatch(/already passed/);
 });
 
+const CLOSES_AFTER = SLOT_MINUTES - BOOKING_LEAD_MINUTES;  // 25 minutes in
+
 // The slot you are standing in is bookable. Somebody arriving at 10:01 wants
 // the half hour that is running, and a desk sitting empty in front of them is
 // not a thing to be told to wait for.
 test('the slot already in progress is still claimable', () => {
   expect(tooSoonError(minutesFromNow(-1))).toBeNull();
-  expect(tooSoonError(minutesFromNow(-(SLOT_MINUTES - 1)))).toBeNull();
+  expect(tooSoonError(minutesFromNow(-(CLOSES_AFTER - 1)))).toBeNull();
 });
 
-// The boundary, which is the whole rule: claimable until the slot ends, then
-// not. Exactly at the end is refused — that slot is over.
-test('a slot stops being claimable the moment it ends', () => {
+// The boundary, which is the whole rule: five minutes before the slot ends it
+// shuts, so 10:00 is gone at 10:25 rather than at 10:30.
+test('a slot shuts five minutes before it ends', () => {
+  expect(tooSoonError(minutesFromNow(-CLOSES_AFTER))).toMatch(/already passed/);
   expect(tooSoonError(minutesFromNow(-SLOT_MINUTES))).toMatch(/already passed/);
 });
 
-// There is no lead time any more. This is the case the old rule got wrong in
-// both directions at once: at 10:26 neither 10:00 nor 10:30 could be booked.
-test('a slot minutes away is allowed, with nothing closing early', () => {
+// The lead is measured from the end of the slot, so it never blocks one that
+// has not started. The old rule closed 11:00 at 10:56 and left a four-minute
+// hole where neither slot could be taken.
+test('a slot that has not started is never too soon', () => {
   expect(tooSoonError(minutesFromNow(1))).toBeNull();
   expect(tooSoonError(minutesFromNow(4))).toBeNull();
+});
+
+// The rule is about the slot a booking starts in, not how long it runs, so a
+// two-hour booking from 10:00 is judged exactly as a half-hour one is.
+test('the answer does not depend on how long was asked for', () => {
+  expect(tooSoonError(minutesFromNow(-(CLOSES_AFTER - 1)))).toBeNull();
+  expect(tooSoonError(minutesFromNow(-(CLOSES_AFTER + 1)))).toMatch(/already passed/);
 });

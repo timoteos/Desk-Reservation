@@ -328,8 +328,14 @@ export default function AdminBookingModal({ users, onClose, onBooked }) {
                   onChange={(e) => handleStartChange(Number(e.target.value))}
                   className="w-full border border-surface-line rounded-lg px-3 py-2.5 text-ink-body text-sm bg-white focus:outline-none focus:ring-2 focus:ring-mqd-btn"
                 >
-                  {timeOptions({ to: OFFICE_END - SLOT_MINUTES }).map((o) => (
-                    <option key={o.value} value={o.value} disabled={o.value < earliest}>
+                  {/* Elapsed slots are absent rather than greyed out, matching
+                      the desk selection page — the same question asked from a
+                      different screen should not offer a different list. */}
+                  {timeOptions({
+                    from: Math.min(earliest, OFFICE_END - SLOT_MINUTES),
+                    to: OFFICE_END - SLOT_MINUTES,
+                  }).map((o) => (
+                    <option key={o.value} value={o.value}>
                       {o.label}
                     </option>
                   ))}

@@ -20,21 +20,24 @@ test('the slot in progress is the earliest on offer', () => {
   const today = atLocalTime(10, 1);
   expect(earliestStartOn(today)).toBe(10 * 60);
 
-  atLocalTime(10, 29);
+  atLocalTime(10, 24);
   expect(earliestStartOn(today)).toBe(10 * 60);
 });
 
-// One minute later the slot has rolled over, and so does the offer.
-test('it moves on at the slot boundary, not before it', () => {
-  const today = atLocalTime(10, 30);
+// The boundary, which is the rule: bookable until five minutes before it ends.
+test('a slot drops out five minutes before it ends, not when it ends', () => {
+  const today = atLocalTime(10, 25);
+  expect(earliestStartOn(today)).toBe(10 * 60 + SLOT_MINUTES);
+
+  atLocalTime(10, 29);
   expect(earliestStartOn(today)).toBe(10 * 60 + SLOT_MINUTES);
 });
 
-// The case the five-minute lead broke: at 10:26 it offered 11:00, so neither
-// the running slot nor the next one could be taken.
-test('nothing closes early any more', () => {
-  const today = atLocalTime(10, 26);
-  expect(earliestStartOn(today)).toBe(10 * 60);
+// The old rule measured the same five minutes from the start of the slot and
+// closed 11:00 at 10:56, which left 10:26–10:30 with nothing bookable at all.
+test('the lead trims the end of a slot, never the start of the next', () => {
+  const today = atLocalTime(10, 56);
+  expect(earliestStartOn(today)).toBe(11 * 60);
 });
 
 test('a future date offers the whole day regardless of the time now', () => {
